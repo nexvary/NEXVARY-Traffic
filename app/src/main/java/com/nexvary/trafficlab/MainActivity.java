@@ -25,6 +25,7 @@ public class MainActivity extends Activity {
     private final EvidenceWorkspace evidence = new EvidenceWorkspace();
     private final CaseWorkspace cases = new CaseWorkspace();
     private String activeCaseId;
+    private final Set<String> importedCaptures=new LinkedHashSet<>();
     private LabRequest beforeRequest;
     private LabRequest lastRequest;
     private LabResponse lastResponse;
@@ -88,6 +89,7 @@ public class MainActivity extends Activity {
     }
     private void addBottomNav(LinearLayout nav,String name,int icon,int color,Runnable r){ screens.put(name,r); LinearLayout box=new LinearLayout(this); box.setOrientation(LinearLayout.VERTICAL); box.setGravity(Gravity.CENTER); box.setPadding(dp(2),dp(4),dp(2),dp(2)); android.widget.ImageView iv=new android.widget.ImageView(this); iv.setImageResource(icon); iv.setColorFilter(color); box.addView(iv,new LinearLayout.LayoutParams(dp(24),dp(24))); TextView label=text(UiI18n.t(this,name),10,name.equals("About")?cyan:silver); label.setTextIsSelectable(false); label.setGravity(Gravity.CENTER); label.setSingleLine(true); label.setPadding(0,dp(2),0,0); box.addView(label,new LinearLayout.LayoutParams(-1,-2)); box.setTag("nav:"+name); box.setContentDescription(UiI18n.t(this,name)); box.setOnClickListener(v->navigate(name,r)); box.setClickable(true); box.setFocusable(true); LinearLayout.LayoutParams lp=new LinearLayout.LayoutParams(0,-1,1); lp.setMargins(dp(2),0,dp(2),0); nav.addView(box,lp); }
     private void navigate(String name,Runnable r){
+        importCapturedTraffic();
         if ("HTTPS Lab".equals(name)) { r.run(); return; }
         if(!name.equals(currentScreen)){ navStack.push(currentScreen); currentScreen=name; }
         r.run();
@@ -118,7 +120,7 @@ public class MainActivity extends Activity {
         return r;
     }
 
-    private void showDashboard(){ clear();
+    private void showDashboard(){ importCapturedTraffic(); clear();
         LinearLayout hero=card("NEXVARY TRAFFIC LAB"); hero.setGravity(Gravity.CENTER_HORIZONTAL);
         TextView big=text("NEXVARY",30,silver); big.setTypeface(Typeface.create("sans-serif-light",Typeface.BOLD)); big.setLetterSpacing(.18f); big.setGravity(Gravity.CENTER); hero.addView(big);
         TextView strap=text("EXECUTIVE TECHNOLOGY PROTECTION",10,gold); strap.setGravity(Gravity.CENTER); strap.setLetterSpacing(.10f); hero.addView(strap);
@@ -261,7 +263,7 @@ public class MainActivity extends Activity {
     private void execute(LabRequest req){ LabRequest normalized=RequestNormalizer.normalize(req); status.setText("● FORWARDING TO LOCAL LAB SERVER … • Content-Length "+RequestNormalizer.utf8Length(normalized.body)); new Thread(()->{ try { LabResponse res=RawHttpClient.sendLocal(PORT,normalized); List<Finding> f=RiskEngine.scan(normalized,res); history.add(normalized,res,f); lastRequest=normalized.copy(); lastResponse=res; evidence.add("HTTP "+normalized.method+" "+normalized.path, normalized.toRaw("127.0.0.1:"+PORT)+"\n\n"+res.raw); runOnUiThread(()->showResult(normalized,res,f)); } catch(Exception e){ runOnUiThread(()->status.setText("Error: "+e.getMessage())); }}).start(); }
     private void showResult(LabRequest req,LabResponse res,List<Finding> f){ clear(); status.setText("● RESPONSE "+res.statusCode+" • "+res.elapsedMs+" ms • LOCAL LAB"); LinearLayout a=card("Forwarded request"); a.addView(text(req.toRaw("127.0.0.1:"+PORT),12,silver)); LinearLayout b=card("Server response"); b.addView(text(res.raw,12,green)); LinearLayout c=card("NEXVARY Risk Engine — score "+RiskEngine.score(f)+"/100"); for(Finding x:f)c.addView(text(x.severity()+" • "+x.title()+"\n"+x.detail(),13,x.severity().equals("HIGH")?danger:gold)); Button again=button("Send to Repeater",purple); again.setOnClickListener(v->{intercept.intercept(req);navigate("Repeater",this::showRepeater);}); c.addView(again); }
 
-    private void showHistory(){ clear(); LinearLayout c=card("HTTP HISTORY — local lab sessions"); EditText q=edit(""); q.setHint(UiI18n.t(this,"Search method, path, header, body, response or tag")); c.addView(q); Button search=button("Search",cyan); c.addView(search); LinearLayout results=new LinearLayout(this); results.setOrientation(LinearLayout.VERTICAL); c.addView(results); Runnable render=()->{ results.removeAllViews(); List<HistoryEntry> list=history.search(q.getText().toString()); if(list.isEmpty()) results.addView(text("No sessions yet.",13,silver)); for(HistoryEntry e:list){ TextView t=text(e.summary()+"\nTags: "+e.tags,13,silver); results.addView(t); Button tag=button("Tag #"+e.id+" as LECTURE",gold); tag.setOnClickListener(v->{history.tag(e.id,"LECTURE");showHistory();}); results.addView(tag);} }; search.setOnClickListener(v->render.run()); render.run(); }
+    private void showHistory(){ importCapturedTraffic(); clear(); LinearLayout c=card("HTTP HISTORY — demo and captured HTTPS sessions"); EditText q=edit(""); q.setHint(UiI18n.t(this,"Search method, path, header, body, response or tag")); c.addView(q); Button search=button("Search",cyan); c.addView(search); LinearLayout results=new LinearLayout(this); results.setOrientation(LinearLayout.VERTICAL); c.addView(results); Runnable render=()->{ results.removeAllViews(); List<HistoryEntry> list=history.search(q.getText().toString()); if(list.isEmpty()) results.addView(text("No sessions yet.",13,silver)); for(HistoryEntry e:list){ TextView t=text(e.summary()+"\nTags: "+e.tags,13,silver); results.addView(t); Button tag=button("Tag #"+e.id+" as LECTURE",gold); tag.setOnClickListener(v->{history.tag(e.id,"LECTURE");showHistory();}); results.addView(tag);} }; search.setOnClickListener(v->render.run()); render.run(); }
 
     private void showRepeater(){ clear(); LabRequest r=intercept.pending(); if(r==null)r=lastRequest==null?sampleOrder():lastRequest; LinearLayout c=card("REPEATER — localhost-authorized target"); EditText raw=edit(r.toRaw("127.0.0.1:"+PORT)); raw.setMinLines(12); c.addView(raw); Button send=button("Send again",green); c.addView(send); LabRequest finalR=r; send.setOnClickListener(v->{ LabRequest parsed=parseRaw(raw.getText().toString(), finalR); beforeRequest=finalR.copy(); execute(parsed); }); }
     private LabRequest candidate(EditText method,EditText path,EditText headers,EditText body){ LabRequest x=new LabRequest(); x.method=method.getText().toString().trim().toUpperCase(Locale.ROOT); x.path=path.getText().toString().trim(); for(String line:headers.getText().toString().split("\\r?\\n")){ int p=line.indexOf(':'); if(p>0)x.headers.put(line.substring(0,p).trim(),line.substring(p+1).trim()); } x.body=body.getText().toString(); return RequestNormalizer.normalize(x); }
@@ -350,11 +352,31 @@ public class MainActivity extends Activity {
     private void openEmail(String email){ try{ Intent i=new Intent(Intent.ACTION_SENDTO,android.net.Uri.parse("mailto:"+email)); startActivity(i); }catch(Exception e){ Toast.makeText(this,getString(R.string.no_email_app),Toast.LENGTH_LONG).show(); } }
     private void confirmExit(){ exitDialog = new AlertDialog.Builder(this).setTitle(getString(R.string.exit_app)).setMessage(getString(R.string.exit_confirm)).setNegativeButton(getString(R.string.cancel),null).setPositiveButton(getString(R.string.exit_app),(d,w)->{ exitApplication(); }).show(); }
 
+    @Override protected void onResume(){
+        super.onResume();
+        if(status!=null && AuthSession.isUnlocked() && importCapturedTraffic()>0){
+            if("Dashboard".equals(currentScreen))showDashboard();else if("History".equals(currentScreen))showHistory();
+        }
+    }
+    private int importCapturedTraffic(){
+        int added=0;
+        for(CapturedTraffic.Exchange exchange:CapturedTraffic.all()){
+            if(!importedCaptures.add(exchange.id()))continue;
+            LabRequest request=CapturedTraffic.request(exchange);LabResponse response=CapturedTraffic.response(exchange);
+            List<Finding> findings=RiskEngine.scan(request,response);HistoryEntry entry=history.add(request,response,findings);
+            history.tag(entry.id,"REAL_HTTPS");if(exchange.prefixOnly())history.tag(entry.id,"PREFIX_ONLY");
+            evidence.add("HTTPS "+request.method+" "+request.path+(exchange.prefixOnly()?" [PREFIX ONLY]":""),exchange.original()+"\n\nFORWARDED\n"+exchange.forwarded()+"\n\nRESPONSE\n"+exchange.response());
+            lastRequest=request;lastResponse=response;added++;
+        }
+        while(importedCaptures.size()>512)importedCaptures.remove(importedCaptures.iterator().next());
+        return added;
+    }
     private void exitApplication(){
         AuthSession.revoke();
         stopService(new Intent(this, com.nexvary.trafficlab.vpn.LabVpnService.class));
         stopService(new Intent(this, com.nexvary.trafficlab.tls.EmbeddedProxyService.class));
         server.stop();
+        CapturedTraffic.clear();
         finishAndRemoveTask();
     }
     private String headers(LabRequest r){StringBuilder b=new StringBuilder();for(var e:r.headers.entrySet())b.append(e.getKey()).append(": ").append(e.getValue()).append('\n');return b.toString();}

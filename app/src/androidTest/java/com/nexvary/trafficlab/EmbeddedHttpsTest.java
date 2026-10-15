@@ -51,6 +51,12 @@ public class EmbeddedHttpsTest extends InstrumentationTestCase {
                 proxy.decide(flow.id,flow.request.replace("price\":100","price\":1"),false);
                 String reply=client.get(15,TimeUnit.SECONDS);assertTrue(reply,reply.contains("accepted:{\"price\":1}"));assertEquals("{\"price\":1}",upstream.get(10,TimeUnit.SECONDS));
                 assertEquals("COMPLETE",flow.status);assertTrue(flow.response.contains("accepted:"));
+                long until=System.currentTimeMillis()+3000;
+                while(com.nexvary.trafficlab.core.CapturedTraffic.all().isEmpty()&&System.currentTimeMillis()<until)Thread.sleep(10);
+                boolean imported=false;
+                for(com.nexvary.trafficlab.core.CapturedTraffic.Exchange exchange:com.nexvary.trafficlab.core.CapturedTraffic.all())
+                    if(com.nexvary.trafficlab.core.CapturedTraffic.request(exchange).body.equals("{\"price\":1}"))imported=true;
+                assertTrue("Real TLS flow was not handed to the analysis pages",imported);
             }
         }finally{threads.shutdownNow();}
     }

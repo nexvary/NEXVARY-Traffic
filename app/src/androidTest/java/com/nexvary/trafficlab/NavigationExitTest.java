@@ -71,6 +71,17 @@ public class NavigationExitTest extends InstrumentationTestCase {
         click("nav:back");assertEquals("Repeater",route());click("nav:back");assertEquals("Intercept",route());
         click("nav:back");assertEquals("Dashboard",route());click("nav:back");assertEquals("Dashboard",route());
     }
+    public void testCapturedTrafficFeedsHistoryAndEvidence() throws Exception {
+        String raw="GET /captured-lesson HTTP/1.1\r\nHost: lab.example\r\n\r\n";
+        com.nexvary.trafficlab.core.CapturedTraffic.completed(raw,raw,"HTTP/1.1 200 OK\r\n\r\ntraining-response",12,false);
+        click("nav:History");
+        com.nexvary.trafficlab.core.HistoryStore history=(com.nexvary.trafficlab.core.HistoryStore)field("history");
+        boolean found=false;for(com.nexvary.trafficlab.core.HistoryEntry entry:history.all())
+            if(entry.request.path.equals("/captured-lesson")&&entry.tags.contains("REAL_HTTPS")&&entry.response.body.equals("training-response"))found=true;
+        assertTrue("Captured traffic is absent from History",found);
+        click("nav:Evidence");com.nexvary.trafficlab.evidence.EvidenceWorkspace evidence=(com.nexvary.trafficlab.evidence.EvidenceWorkspace)field("evidence");
+        assertFalse(evidence.all().isEmpty());assertTrue("Captured evidence broke the hash chain",evidence.verifyChain());
+    }
     public void testHttpsReturnsToExistingPage() throws Exception {
         click("nav:History");
         Instrumentation.ActivityMonitor monitor=getInstrumentation().addMonitor(HttpsLabActivity.class.getName(),null,false);

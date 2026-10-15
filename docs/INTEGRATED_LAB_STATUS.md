@@ -18,7 +18,7 @@ The target application must use the explicit proxy and trust the lab CA. This is
 
 The request editor is for UTF-8 text. Forward Original preserves the captured request body bytes, including binary content; Forward Edited encodes the edited body as UTF-8 and recalculates Content-Length. Ordinary routing fields and framing headers are normalized. No upstream trust-all or hostname-verification bypass is used in production.
 
-The service owns temporary in-memory flow history; stopping it discards those flows. They are not yet merged into the older demo History/Evidence pages. The generic VPN service remains limited to the earlier closed lab subnet and is not the HTTPS engine.
+The service owns temporary in-memory flow history; stopping it discards those flows. Completed request/response text previews are handed to a bounded process-local archive and imported into History/Evidence and their analysis pages when navigating or returning to MainActivity. The archive retains at most 32 exchanges, each preview capped at 32,768 characters; truncated evidence is tagged PREFIX_ONLY. The archive survives stopping the capture service within the same process; explicit app exit clears it. The generic VPN service remains limited to the earlier closed lab subnet and is not the HTTPS engine.
 
 ## Verification
 
@@ -29,7 +29,7 @@ The TLS tests create a local HTTPS fixture, trust only its test CA, decrypt and 
 ## Remaining before calling the application complete
 
 1. Implement and test full VPN packet forwarding and per-app routing, including IPv6 and DNS, before claiming all-app capture.
-2. Merge real flows into History/Evidence and implement HAR import/export plus retention controls.
+2. Add HAR import/export and persistent retention controls beyond the bounded in-memory capture handoff.
 3. Add response editing and supported streaming protocols with protocol-specific tests.
 4. Validate CA setup and capture on physical lab devices and multiple Android versions.
 5. Expand UI visual QA, translation coverage and accessibility. Existing lint warnings must be reviewed.

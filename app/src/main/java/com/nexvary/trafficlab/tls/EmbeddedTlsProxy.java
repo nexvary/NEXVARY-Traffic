@@ -1,6 +1,7 @@
 package com.nexvary.trafficlab.tls;
 
 import javax.net.ssl.*;
+import com.nexvary.trafficlab.core.CapturedTraffic;
 import java.net.*;
 import java.io.*;
 import java.nio.charset.StandardCharsets;
@@ -13,6 +14,8 @@ public final class EmbeddedTlsProxy implements AutoCloseable {
     public static final int MAX_BODY = 1024 * 1024, MAX_SAMPLE = 65536;
     public static final class Flow {
         public final long id; public final String host;
+        private final long started=System.currentTimeMillis();
+        private String sent=""; private boolean responseTruncated;
         public volatile String request = "", response = "", status = "CONNECTING", error = "";
         private final CountDownLatch decision = new CountDownLatch(1);
         private volatile boolean dropped;
@@ -105,6 +108,7 @@ public final class EmbeddedTlsProxy implements AutoCloseable {
                         request=normalize(flow.edited.substring(0,boundary+4),flow.edited.substring(boundary+4).getBytes(StandardCharsets.UTF_8));
                     }
                 }
+                flow.sent=new String(request,StandardCharsets.UTF_8);
                 flow.status="FORWARDING";
                 try (Socket tcp=new Socket()) {
                     sockets.add(tcp);
@@ -120,14 +124,17 @@ public final class EmbeddedTlsProxy implements AutoCloseable {
                                 decrypted.getOutputStream().write(chunk,0,count);
                                 if(sample.size()<MAX_SAMPLE) sample.write(chunk,0,Math.min(count,MAX_SAMPLE-sample.size()));
                             }
-                            decrypted.getOutputStream().flush(); flow.response=new String(sample.toByteArray(),StandardCharsets.UTF_8); flow.status="COMPLETE";
+                            decrypted.getOutputStream().flush(); flow.responseTruncated=total>MAX_SAMPLE; flow.response=new String(sample.toByteArray(),StandardCharsets.UTF_8); flow.status="COMPLETE";
                         }
                     } finally { sockets.remove(tcp); }
                 }
             }
         } catch(Exception error) {
             if(flow!=null) { flow.error=error.getClass().getSimpleName()+": "+error.getMessage(); flow.status="FAILED"; }
-        } finally { sockets.remove(client); }
+        } finally {
+            if(flow!=null && flow.status.equals("COMPLETE"))CapturedTraffic.completed(flow.request,flow.sent,flow.response,System.currentTimeMillis()-flow.started,flow.responseTruncated);
+            sockets.remove(client);
+        }
     }
     private byte[] normalize(String head, byte[] body) throws IOException {
         if(body.length > MAX_BODY) throw new IOException("Request too large");
