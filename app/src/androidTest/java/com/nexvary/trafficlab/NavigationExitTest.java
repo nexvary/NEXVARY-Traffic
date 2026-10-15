@@ -74,6 +74,10 @@ public class NavigationExitTest extends InstrumentationTestCase {
         long deadline=System.currentTimeMillis()+15000;
         while(EmbeddedProxyService.engine==null && System.currentTimeMillis()<deadline)Thread.sleep(50);
         assertNotNull("Embedded engine did not start: "+EmbeddedProxyService.state,EmbeddedProxyService.engine);
+        Socket active=new Socket("127.0.0.1",8888);active.setSoTimeout(5000);
+        active.getOutputStream().write("CONNECT localhost:443 HTTP/1.1\r\nHost: localhost\r\n\r\n".getBytes(java.nio.charset.StandardCharsets.US_ASCII));active.getOutputStream().flush();
+        int headerState=0, headerBytes=0;while(headerState!=0x0d0a0d0a && headerBytes++<32768){int value=active.getInputStream().read();assertTrue("No CONNECT acknowledgement",value>=0);headerState=(headerState<<8)|value;}
+        final int exitedTask=activity.getTaskId();
         click("nav:About");click("app:exit");AlertDialog dialog=(AlertDialog)field("exitDialog");
         getInstrumentation().runOnMainSync(()->dialog.getButton(AlertDialog.BUTTON_NEGATIVE).performClick());
         assertFalse(activity.isFinishing());assertTrue(AuthSession.isUnlocked());assertTrue(EmbeddedProxyService.engine.isRunning());
@@ -82,8 +86,14 @@ public class NavigationExitTest extends InstrumentationTestCase {
         assertTrue(activity.isFinishing()||activity.isDestroyed());assertFalse(AuthSession.isUnlocked());
         deadline=System.currentTimeMillis()+5000;while(EmbeddedProxyService.engine!=null && System.currentTimeMillis()<deadline)Thread.sleep(25);
         assertNull("Exit left capture running",EmbeddedProxyService.engine);
+        try {assertEquals("Exit left an active TLS connection open",-1,active.getInputStream().read());}finally{active.close();}
+        for(ActivityManager.AppTask task:activity.getSystemService(ActivityManager.class).getAppTasks())assertTrue("Exit left its task in recents",task.getTaskInfo().taskId!=exitedTask);
         try(Socket socket=new Socket()){socket.connect(new InetSocketAddress("127.0.0.1",8888),500);fail("Exit left proxy listener open");}catch(java.io.IOException expected){}
         try(Socket socket=new Socket()){socket.connect(new InetSocketAddress("127.0.0.1",18088),500);fail("Exit left demo server open");}catch(java.io.IOException expected){}
+        Instrumentation.ActivityMonitor loginMonitor=getInstrumentation().addMonitor(LoginActivity.class.getName(),null,false);
+        getInstrumentation().getTargetContext().startActivity(new Intent(getInstrumentation().getTargetContext(),MainActivity.class).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK));
+        Activity login=getInstrumentation().waitForMonitorWithTimeout(loginMonitor,5000);assertNotNull("Reopening after exit did not require login",login);
+        getInstrumentation().runOnMainSync(()->login.finish());getInstrumentation().removeMonitor(loginMonitor);
     }
     public void testArabicNavigation() throws Exception {
         getInstrumentation().runOnMainSync(()->activity.finish());getInstrumentation().waitForIdleSync();
