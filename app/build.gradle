@@ -20,7 +20,10 @@ android {
     }
 
     packaging {
-        resources { excludes += "META-INF/versions/9/OSGI-INF/MANIFEST.MF" }
+        resources {
+            excludes += "META-INF/versions/9/OSGI-INF/MANIFEST.MF"
+            merges += "META-INF/LICENSE.md"
+        }
     }
     buildFeatures {
         buildConfig true
