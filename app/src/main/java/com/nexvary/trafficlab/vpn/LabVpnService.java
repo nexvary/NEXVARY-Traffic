@@ -15,7 +15,7 @@ public final class LabVpnService extends VpnService {
     public static final String ACTION_PACKET="com.nexvary.trafficlab.PACKET";
     public static volatile String state="STOPPED";
     private static volatile LabVpnService instance;
-    public static String diagnostics(){LabVpnService current=instance;return current==null?state:state+" · "+(current.gateway==null?"":current.gateway.lastError);}
+    public static String diagnostics(){LabVpnService current=instance;return current==null?state:state+" · "+(current.gateway==null?"":current.gateway.lastStage+" / UP "+current.gateway.uploaded.get()+" DOWN "+current.gateway.downloaded.get()+" / "+current.gateway.lastError);}
     private ParcelFileDescriptor tun;
     private LocalSocksGateway gateway;
     private final Handler handler=new Handler(Looper.getMainLooper());

@@ -58,6 +58,11 @@ public final class HttpsLabActivity extends Activity {
             catch(Exception error){state.setText(error.getMessage());}
         });
         button(page,tr("أرشيف الجلسات وتصدير HAR","Session archive and HAR export"),"tls:archive",()->startActivity(new Intent(this,SessionArchiveActivity.class)));
+        button(page,tr("بدء درس HTTPS محلي دون إنترنت","Start offline HTTPS lesson"),"tls:lesson",()->{
+            if(EmbeddedProxyService.engine!=null){state.setText(tr("أوقف المحرك الحالي أولًا","Stop the current engine first"));return;}
+            startForegroundService(new Intent(this,EmbeddedProxyService.class).putExtra("lesson",true).putExtra("pauseResponse",pauseResponse.isChecked()));
+        });
+        text(page,tr("الدرس المحلي: انتظر PAUSED، غيّر price من 100 إلى 1 ثم مرّر الطلب. ستظهر استجابة الخادم المحلي والنتيجة. جميع اتصالات الدرس تبقى على هذا الجهاز.","Offline lesson: wait for PAUSED, change price from 100 to 1, then forward. The local server response shows the result. All lesson connections stay on this device."),14);
         selector=new Spinner(this);page.addView(selector);selector.setOnItemSelectedListener(new AdapterView.OnItemSelectedListener(){
             public void onNothingSelected(AdapterView<?> parent){}
             public void onItemSelected(AdapterView<?> parent,View view,int position,long id){if(position<visible.size()){selected=visible.get(position).id;showSelected();}}
@@ -99,7 +104,7 @@ public final class HttpsLabActivity extends Activity {
         String edited=request.getText().toString().replace("\r\n","\n").replace("\n","\r\n");engine.decide(selected,drop?null:edited,drop);refresh();
     }catch(Exception error){state.setText(error.getMessage());}}
     private void refresh(){
-        if(state==null)return;state.setText(EmbeddedProxyService.state+" · 127.0.0.1:8888");
+        if(state==null)return;state.setText(EmbeddedProxyService.state+" · 127.0.0.1:8888"+(EmbeddedProxyService.lesson==null?"":"\n"+EmbeddedProxyService.lesson.result));
         EmbeddedTlsProxy engine=EmbeddedProxyService.engine;visible=engine==null?java.util.Collections.emptyList():engine.flows();
         StringBuilder key=new StringBuilder();String[] labels=new String[visible.size()];int position=0;
         for(int i=0;i<visible.size();i++){EmbeddedTlsProxy.Flow flow=visible.get(i);labels[i]="#"+flow.id+" "+flow.host+" · "+flow.status;key.append(labels[i]);if(flow.id==selected)position=i;}

@@ -101,6 +101,7 @@ public class NavigationExitTest extends InstrumentationTestCase {
         long deadline=System.currentTimeMillis()+15000;
         while(EmbeddedProxyService.engine==null && System.currentTimeMillis()<deadline)Thread.sleep(50);
         assertNotNull("Embedded engine did not start: "+EmbeddedProxyService.state,EmbeddedProxyService.engine);
+        assertNull(android.net.VpnService.prepare(activity));
         getInstrumentation().runOnMainSync(()->activity.startForegroundService(new Intent(activity,com.nexvary.trafficlab.vpn.LabVpnService.class).putExtra("packages",new String[]{"com.nexvary.trafficfixture"}).putExtra("host","localhost").putExtra("port",443)));
         deadline=System.currentTimeMillis()+10000;
         while(!com.nexvary.trafficlab.vpn.LabVpnService.state.equals("RUNNING")&&System.currentTimeMillis()<deadline)Thread.sleep(25);
@@ -128,6 +129,24 @@ public class NavigationExitTest extends InstrumentationTestCase {
         getInstrumentation().getTargetContext().startActivity(new Intent(getInstrumentation().getTargetContext(),MainActivity.class).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK));
         Activity login=getInstrumentation().waitForMonitorWithTimeout(loginMonitor,5000);assertNotNull("Reopening after exit did not require login",login);
         getInstrumentation().runOnMainSync(()->login.finish());getInstrumentation().removeMonitor(loginMonitor);
+    }
+    public void testOfflineHttpsLessonThroughUi() throws Exception {
+        Instrumentation.ActivityMonitor monitor=getInstrumentation().addMonitor(HttpsLabActivity.class.getName(),null,false);
+        click("nav:HTTPS Lab");Activity https=getInstrumentation().waitForMonitorWithTimeout(monitor,5000);assertNotNull(https);
+        getInstrumentation().runOnMainSync(()->{View start=find(https.getWindow().getDecorView(),"tls:lesson");assertNotNull(start);start.performClick();});
+        long deadline=System.currentTimeMillis()+15000;com.nexvary.trafficlab.tls.EmbeddedTlsProxy.Flow paused=null;
+        while(paused==null&&System.currentTimeMillis()<deadline){if(EmbeddedProxyService.engine!=null)for(com.nexvary.trafficlab.tls.EmbeddedTlsProxy.Flow flow:EmbeddedProxyService.engine.flows())if(flow.status.equals("PAUSED"))paused=flow;if(paused==null)Thread.sleep(20);}
+        assertNotNull("Offline lesson did not pause: "+EmbeddedProxyService.state,paused);
+        // Wait until the screen's polling loop renders this request before editing it.
+        Thread.sleep(1200);getInstrumentation().waitForIdleSync();
+        getInstrumentation().runOnMainSync(()->{android.widget.EditText request=(android.widget.EditText)find(https.getWindow().getDecorView(),"tls:request");assertTrue(request.getText().toString().contains("price\":100"));request.setText(request.getText().toString().replace("price\":100","price\":1"));find(https.getWindow().getDecorView(),"tls:forward").performClick();});
+        deadline=System.currentTimeMillis()+10000;
+        while(EmbeddedProxyService.lesson!=null&&!EmbeddedProxyService.lesson.result.contains("price\":1,")&&System.currentTimeMillis()<deadline)Thread.sleep(20);
+        assertNotNull(EmbeddedProxyService.lesson);assertTrue(EmbeddedProxyService.lesson.result,EmbeddedProxyService.lesson.result.contains("price\":1,"));
+        getInstrumentation().runOnMainSync(()->find(https.getWindow().getDecorView(),"tls:back").performClick());getInstrumentation().waitForIdleSync();getInstrumentation().removeMonitor(monitor);
+        click("nav:History");com.nexvary.trafficlab.core.HistoryStore history=(com.nexvary.trafficlab.core.HistoryStore)field("history");boolean found=false;
+        for(com.nexvary.trafficlab.core.HistoryEntry entry:history.all())if(entry.request.path.equals("/lesson")&&entry.request.body.contains("price\":1,"))found=true;
+        assertTrue("Offline TLS lesson did not reach History",found);
     }
     public void testVpnAndArchiveNavigationReturnsToHistory() throws Exception {
         click("nav:History");

@@ -43,8 +43,14 @@ public final class NativeTunnelTest extends InstrumentationTestCase {
                 Thread.sleep(200);assertTrue("native engine did not start",TProxyService.TProxyIsRunning());
                 byte[] expected=(ipv6?"native-ipv6":"native-ipv4").getBytes(StandardCharsets.US_ASCII);
                 byte[] packet=udp(ipv6,echo.getLocalPort(),expected);Os.write(right,packet,0,packet.length);
-                byte[] answer=new byte[2048];int count=Os.read(right,answer,0,answer.length);int h=ipv6?40:(answer[0]&15)*4;
-                assertEquals(ipv6?6:4,answer[0]>>>4);assertEquals(32000,word(answer,h+2));assertEquals(expected.length,count-h-8);
+                byte[] answer=new byte[2048];int count=0,h=0;long receivedUntil=System.currentTimeMillis()+10000;
+                while(System.currentTimeMillis()<receivedUntil){
+                    try{count=Os.read(right,answer,0,answer.length);}catch(ErrnoException error){throw new AssertionError("No UDP reply (IPv6="+ipv6+"): "+gateway.lastError+" / "+java.util.Arrays.toString(java.util.Arrays.copyOf(answer,Math.min(count,80))),error);}
+                    int version=(answer[0]&255)>>>4;h=version==6?40:(answer[0]&15)*4;
+                    // IPv6 Neighbor Discovery can precede the application response.
+                    if(version==(ipv6?6:4)&&count>=h+8&&(answer[version==6?6:9]&255)==17&&word(answer,h+2)==32000)break;
+                }
+                assertEquals("UDP payload (IPv6="+ipv6+")",expected.length,count-h-8);assertEquals(32000,word(answer,h+2));
                 assertEquals(new String(expected,StandardCharsets.US_ASCII),new String(answer,h+8,count-h-8,StandardCharsets.US_ASCII));
                 response.get(5,TimeUnit.SECONDS);
                 long deadline=System.currentTimeMillis()+2000;long[] stats=TProxyService.TProxyGetStats();

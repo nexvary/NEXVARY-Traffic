@@ -1,3 +1,5 @@
+> الحالة الحالية: **10.2.0 — محرك VPN داخلي ومختبر HTTPS**، Android 10+. راجع [دليل الدورة والتشغيل](docs/QUICK_START_AR.md) و[الوظائف والحدود الفعلية](docs/INTEGRATED_LAB_STATUS.md). التقارير الأقدم أدناه تخص إصدارات سابقة.
+
 # NEXVARY Traffic Lab v10.0.1-fixed-lab
 
 **App name:** NEXVARY Traffic Lab

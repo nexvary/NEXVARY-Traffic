@@ -25,7 +25,8 @@ public final class LocalSocksGateway implements AutoCloseable {
     private final Semaphore slots=new Semaphore(24);
     private final ThreadPoolExecutor workers=new ThreadPoolExecutor(0,80,30,TimeUnit.SECONDS,new SynchronousQueue<>());
     private volatile boolean running;
-    public volatile String lastError="";
+    public volatile String lastError="",lastStage="NEW";
+    public final java.util.concurrent.atomic.AtomicLong uploaded=new java.util.concurrent.atomic.AtomicLong(),downloaded=new java.util.concurrent.atomic.AtomicLong();
     private ServerSocket server;
     public LocalSocksGateway(Protector protector,String host,int port,int proxyPort,Supplier<Boolean> enabled) {
         this(protector,host,port,proxyPort,enabled,InetAddress::getByName);
@@ -74,17 +75,20 @@ public final class LocalSocksGateway implements AutoCloseable {
         out.write(new byte[]{5,(byte)status,0,1,127,0,0,1,(byte)(port>>>8),(byte)port});out.flush();
     }
     private void handle(Socket client)throws Exception {
+        lastStage="AUTH";
         DataInputStream in=new DataInputStream(client.getInputStream());OutputStream out=client.getOutputStream();
-        if(!authenticate(in,out))return;
+        if(!authenticate(in,out))return;lastStage="AUTHENTICATED";
         if(in.readUnsignedByte()!=5)return;
         int command=in.readUnsignedByte();if(in.readUnsignedByte()!=0)return;
         String host=address(in,in.readUnsignedByte());int port=in.readUnsignedShort();
         if(command==3){udp(client,in,out);return;}
         if(command!=1){result(out,7,0);return;}
-        Socket remote=java.nio.channels.SocketChannel.open().socket();resources.add(remote);
+        Socket remote=new Socket();resources.add(remote);
         boolean established=false;
         try(remote){
+            remote.bind(new InetSocketAddress(0));
             if(!protector.protect(remote))throw new IOException("Socket protection failed");
+            lastStage="CONNECTING";
             boolean inspect=inspectHost!=null && inspectHost.equalsIgnoreCase(host) && port==inspectPort && inspectEnabled.get();
             remote.connect(new InetSocketAddress(resolver.resolve(inspect?"127.0.0.1":host),inspect?proxyPort:port),5000);remote.setSoTimeout(180000);
             if(inspect){
@@ -92,9 +96,9 @@ public final class LocalSocksGateway implements AutoCloseable {
                 String header=readHeaders(remote.getInputStream());
                 if(!header.startsWith("HTTP/1.1 200 "))throw new IOException("HTTPS engine rejected tunnel");
             }
-            result(out,0,0);established=true;client.setSoTimeout(180000);
-            Future<?> upload=workers.submit(()->{try{copy(in,remote.getOutputStream());remote.shutdownOutput();}catch(IOException error){closeResource(remote);}});
-            try{copy(remote.getInputStream(),out);try{client.shutdownOutput();}catch(IOException ignored){}}
+            result(out,0,0);established=true;lastStage="RELAY";client.setSoTimeout(180000);
+            Future<?> upload=workers.submit(()->{try{copy(in,remote.getOutputStream(),uploaded);remote.shutdownOutput();}catch(IOException error){closeResource(remote);}});
+            try{copy(remote.getInputStream(),out,downloaded);try{client.shutdownOutput();}catch(IOException ignored){}}
             finally{upload.cancel(true);}
         }catch(IOException error){lastError=error.getClass().getSimpleName()+": "+error.getMessage();try{if(!established)result(out,5,0);}catch(IOException ignored){}}
         finally{resources.remove(remote);}
@@ -104,17 +108,17 @@ public final class LocalSocksGateway implements AutoCloseable {
         while(bytes.size()<32768){int b=in.read();if(b<0)throw new EOFException();bytes.write(b);state=(state<<8)|b;if(state==0x0d0a0d0a)return bytes.toString("ISO-8859-1");}
         throw new IOException("Oversized proxy headers");
     }
-    private static void copy(InputStream in,OutputStream out)throws IOException {
-        byte[] b=new byte[16384];int n;while((n=in.read(b))!=-1){out.write(b,0,n);out.flush();}
+    private static void copy(InputStream in,OutputStream out,java.util.concurrent.atomic.AtomicLong counter)throws IOException {
+        byte[] b=new byte[16384];int n;while((n=in.read(b))!=-1){out.write(b,0,n);out.flush();counter.addAndGet(n);}
     }
     private void udp(Socket client,DataInputStream control,OutputStream reply)throws Exception {
         DatagramSocket local=new DatagramSocket(new InetSocketAddress("127.0.0.1",0));
         DatagramSocket remote=new DatagramSocket(null);
         resources.add(local);resources.add(remote);
         try(local;remote){
-            if(!protector.protect(remote))throw new IOException("UDP protection failed");
-            remote.bind(new InetSocketAddress(0));remote.setSoTimeout(1000);local.setSoTimeout(1000);
-            Set<InetSocketAddress> permitted=ConcurrentHashMap.newKeySet();
+            remote.bind(new InetSocketAddress(0));
+            if(!protector.protect(remote))throw new IOException("UDP protection failed");remote.setSoTimeout(1000);local.setSoTimeout(1000);
+            Map<InetSocketAddress,byte[]> permitted=new ConcurrentHashMap<>();
             java.util.concurrent.atomic.AtomicReference<InetSocketAddress> peer=new java.util.concurrent.atomic.AtomicReference<>();
             Future<?> outbound=workers.submit(()->{
                 byte[] buffer=new byte[65507];
@@ -125,10 +129,10 @@ public final class LocalSocksGateway implements AutoCloseable {
                     if(peer.get()!=null&&!peer.get().equals(sender))continue;
                     DataInputStream data=new DataInputStream(new ByteArrayInputStream(buffer,0,packet.getLength()));
                     if(data.readUnsignedShort()!=0||data.readUnsignedByte()!=0)continue;
-                    String h=address(data,data.readUnsignedByte());int p=data.readUnsignedShort();
+                    int type=data.readUnsignedByte();String h=address(data,type);int p=data.readUnsignedShort();
                     InetSocketAddress target=new InetSocketAddress(resolver.resolve(h),p);
-                    if(!permitted.contains(target)&&permitted.size()>=64)continue;
-                    peer.compareAndSet(null,sender);permitted.add(target);
+                    if(!permitted.containsKey(target)&&permitted.size()>=64)continue;
+                    peer.compareAndSet(null,sender);permitted.put(target,(type==1||type==4)?InetAddress.getByName(h).getAddress():target.getAddress().getAddress());
                     byte[] payload=new byte[data.available()];data.readFully(payload);remote.send(new DatagramPacket(payload,payload.length,target));
                 }catch(SocketTimeoutException retry){}catch(IOException invalid){if(local.isClosed())break;}
             });
@@ -137,8 +141,8 @@ public final class LocalSocksGateway implements AutoCloseable {
                 while(running&&!remote.isClosed())try{
                     DatagramPacket packet=new DatagramPacket(buffer,buffer.length);remote.receive(packet);
                     InetSocketAddress from=new InetSocketAddress(packet.getAddress(),packet.getPort());
-                    if(peer.get()==null||!permitted.contains(from))continue;
-                    byte[] addr=packet.getAddress().getAddress();
+                    if(peer.get()==null||!permitted.containsKey(from))continue;
+                    byte[] addr=permitted.get(from);
                     ByteArrayOutputStream bytes=new ByteArrayOutputStream();DataOutputStream data=new DataOutputStream(bytes);
                     data.writeShort(0);data.writeByte(0);data.writeByte(addr.length==4?1:4);data.write(addr);data.writeShort(packet.getPort());data.write(buffer,0,packet.getLength());
                     byte[] encoded=bytes.toByteArray();if(encoded.length<=65507)local.send(new DatagramPacket(encoded,encoded.length,peer.get()));
