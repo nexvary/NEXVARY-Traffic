@@ -27,7 +27,15 @@ public class NavigationExitTest extends InstrumentationTestCase {
     private String route() throws Exception {return (String)field("currentScreen");}
     private View find(View root,String tag){if(tag.equals(root.getTag()))return root;if(root instanceof ViewGroup){ViewGroup g=(ViewGroup)root;for(int i=0;i<g.getChildCount();i++){View v=find(g.getChildAt(i),tag);if(v!=null)return v;}}return null;}
     private void click(String tag){
-        getInstrumentation().runOnMainSync(()->{View view=find(activity.getWindow().getDecorView(),tag);assertNotNull("Missing button "+tag,view);view.requestRectangleOnScreen(new Rect(0,0,view.getWidth(),view.getHeight()),true);});
+        getInstrumentation().runOnMainSync(()->{View view=find(activity.getWindow().getDecorView(),tag);assertNotNull("Missing button "+tag,view);view.requestRectangleOnScreen(new Rect(0,0,view.getWidth(),view.getHeight()),true);
+            for(ViewParent parent=view.getParent();parent instanceof ViewGroup;parent=parent.getParent()){
+                ViewGroup group=(ViewGroup)parent;
+                if(group instanceof android.widget.HorizontalScrollView || group instanceof android.widget.ScrollView){
+                    Rect local=new Rect(0,0,view.getWidth(),view.getHeight());group.offsetDescendantRectToMyCoords(view,local);
+                    if(group instanceof android.widget.HorizontalScrollView)group.scrollTo(Math.max(0,local.centerX()-group.getWidth()/2),0);
+                    else group.scrollTo(0,Math.max(0,local.centerY()-group.getHeight()/2));
+                }
+            }});
         getInstrumentation().waitForIdleSync();final Rect bounds=new Rect();
         getInstrumentation().runOnMainSync(()->{View view=find(activity.getWindow().getDecorView(),tag);assertTrue("Button not visible "+tag,view.getGlobalVisibleRect(bounds));});
         long now=SystemClock.uptimeMillis();
