@@ -100,5 +100,6 @@ public class NavigationExitTest extends InstrumentationTestCase {
         LocaleController.setLanguage(getInstrumentation().getTargetContext(),"ar");AuthSession.grant();
         activity=(MainActivity)getInstrumentation().startActivitySync(new Intent(getInstrumentation().getTargetContext(),MainActivity.class).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK));
         getInstrumentation().waitForIdleSync();click("nav:About");assertEquals("About",route());click("nav:back");assertEquals("Dashboard",route());
+        testEveryNavigationButtonAndBack();
     }
 }

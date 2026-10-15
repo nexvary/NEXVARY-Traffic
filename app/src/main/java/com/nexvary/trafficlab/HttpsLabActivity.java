@@ -19,7 +19,7 @@ public final class HttpsLabActivity extends Activity {
     private CheckBox pause;
     private Spinner selector;
     private List<EmbeddedTlsProxy.Flow> visible=java.util.Collections.emptyList();
-    private long selected=-1;
+    private long selected=-1, rendered=-1;
     private String signature="";
     private byte[] publicCertificate;
     private boolean foreground;
@@ -92,7 +92,8 @@ public final class HttpsLabActivity extends Activity {
         showSelected();
     }
     private void showSelected(){for(EmbeddedTlsProxy.Flow flow:visible)if(flow.id==selected){
-        if(!request.hasFocus() || !flow.status.equals("PAUSED"))request.setText(flow.request);
+        if(rendered!=flow.id || !request.hasFocus() || !flow.status.equals("PAUSED"))request.setText(flow.request);
+        rendered=flow.id;
         request.setEnabled(flow.status.equals("PAUSED"));response.setText(flow.status+"\n"+flow.error+"\n"+flow.response);return;
     }}
     @Override protected void onResume(){super.onResume();foreground=true;handler.post(poll);}
