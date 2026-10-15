@@ -42,7 +42,7 @@ public final class VpnLabActivity extends Activity {
             try{selection();Intent consent=VpnService.prepare(this);if(consent!=null)startActivityForResult(consent,91);else start();}
             catch(Exception error){status.setText(error.getMessage());}
         });
-        button(page,tr("إيقاف VPN","Stop VPN"),"vpn:stop",()->stopService(new Intent(this,LabVpnService.class)));
+        button(page,tr("إيقاف VPN","Stop VPN"),"vpn:stop",()->{LabVpnService.stopNow();stopService(new Intent(this,LabVpnService.class));});
         button(page,tr("رجوع","Back"),"vpn:back",this::finish);
     }
     private String[] selection(){

@@ -20,7 +20,7 @@ public class NavigationExitTest extends InstrumentationTestCase {
     }
     @Override protected void tearDown() throws Exception {
         getInstrumentation().getTargetContext().stopService(new Intent(getInstrumentation().getTargetContext(),EmbeddedProxyService.class));
-        getInstrumentation().getTargetContext().stopService(new Intent(getInstrumentation().getTargetContext(),com.nexvary.trafficlab.vpn.LabVpnService.class));
+        com.nexvary.trafficlab.vpn.LabVpnService.stopNow();getInstrumentation().getTargetContext().stopService(new Intent(getInstrumentation().getTargetContext(),com.nexvary.trafficlab.vpn.LabVpnService.class));
         if(activity!=null && !activity.isFinishing())getInstrumentation().runOnMainSync(()->activity.finish());
         getInstrumentation().waitForIdleSync(); AuthSession.revoke(); super.tearDown();
     }

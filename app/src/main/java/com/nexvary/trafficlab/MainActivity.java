@@ -376,6 +376,7 @@ public class MainActivity extends Activity {
     private void exitApplication(){
         AuthSession.revoke();
         com.nexvary.trafficlab.tls.EmbeddedProxyService.stopNow();
+        com.nexvary.trafficlab.vpn.LabVpnService.stopNow();
         stopService(new Intent(this, com.nexvary.trafficlab.vpn.LabVpnService.class));
         stopService(new Intent(this, com.nexvary.trafficlab.tls.EmbeddedProxyService.class));
         server.stop();

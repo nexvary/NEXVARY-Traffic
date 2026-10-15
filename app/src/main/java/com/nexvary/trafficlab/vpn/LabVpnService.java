@@ -19,14 +19,16 @@ public final class LabVpnService extends VpnService {
     private ParcelFileDescriptor tun;
     private LocalSocksGateway gateway;
     private final Handler handler=new Handler(Looper.getMainLooper());
-    private boolean active;
+    private volatile boolean active;
+    private boolean nativeStarted;
+    public static void stopNow(){LabVpnService current=instance;if(current!=null){current.shutdown();current.stopSelf();}}
     private final Runnable monitor=new Runnable(){public void run(){
         if(!active)return;
-        if(!TProxyService.TProxyIsRunning()){state="ERROR: forwarding engine stopped";stopSelf();return;}
+        if(!TProxyService.TProxyIsRunning()){state="ERROR: forwarding engine stopped";shutdown();stopSelf();return;}
         handler.postDelayed(this,1000);
     }};
-    @Override public int onStartCommand(Intent intent,int flags,int id){
-        if(intent==null||"stop".equals(intent.getAction())||!AuthSession.isUnlocked()){stopSelf();return START_NOT_STICKY;}
+    @Override public synchronized int onStartCommand(Intent intent,int flags,int id){
+        if(intent==null||"stop".equals(intent.getAction())||!AuthSession.isUnlocked()){shutdown();stopSelf();return START_NOT_STICKY;}
         if(active)return START_NOT_STICKY;
         NotificationManager manager=getSystemService(NotificationManager.class);
         manager.createNotificationChannel(new NotificationChannel("nexvary_lab_capture","NEXVARY VPN Lab",NotificationManager.IMPORTANCE_LOW));
@@ -54,19 +56,22 @@ public final class LabVpnService extends VpnService {
             File config=new File(getFilesDir(),"vpn-tunnel.yml");
             try(FileOutputStream out=new FileOutputStream(config)){out.write(TunnelConfig.create(port,gateway.username(),gateway.password()).getBytes(StandardCharsets.UTF_8));}
             tun=builder.establish();if(tun==null)throw new IOException("Android VPN permission is required");
-            if(!TProxyService.TProxyStartService(config.getAbsolutePath(),tun.getFd()))throw new IOException("Forwarding engine failed to start");
+            nativeStarted=TProxyService.TProxyStartService(config.getAbsolutePath(),tun.getFd());
+            if(!nativeStarted)throw new IOException("Forwarding engine failed to start");
             active=true;state="RUNNING";handler.postDelayed(monitor,1000);
-        }catch(Exception|LinkageError error){state="ERROR: "+error.getMessage();stopSelf();}
+        }catch(Exception|LinkageError error){state="ERROR: "+error.getMessage();shutdown();stopSelf();}
         return START_NOT_STICKY;
     }
     public static long[] stats(){try{return TProxyService.TProxyGetStats();}catch(LinkageError error){return new long[4];}}
-    @Override public void onRevoke(){stopSelf();super.onRevoke();}
-    @Override public void onDestroy(){
-        instance=null;handler.removeCallbacks(monitor);active=false;
-        try{TProxyService.TProxyStopService();}catch(LinkageError ignored){}
+    @Override public void onRevoke(){shutdown();stopSelf();super.onRevoke();}
+    private synchronized void shutdown(){
+        boolean owner=instance==this;
+        handler.removeCallbacks(monitor);active=false;
+        if(nativeStarted){try{TProxyService.TProxyStopService();}catch(LinkageError ignored){}nativeStarted=false;}
         if(gateway!=null)gateway.close();gateway=null;
         try{if(tun!=null)tun.close();}catch(IOException ignored){}tun=null;
-        new File(getFilesDir(),"vpn-tunnel.yml").delete();
-        if(!state.startsWith("ERROR"))state="STOPPED";stopForeground(true);super.onDestroy();
+        if(owner){instance=null;new File(getFilesDir(),"vpn-tunnel.yml").delete();if(!state.startsWith("ERROR"))state="STOPPED";}
+        stopForeground(true);
     }
+    @Override public void onDestroy(){shutdown();super.onDestroy();}
 }

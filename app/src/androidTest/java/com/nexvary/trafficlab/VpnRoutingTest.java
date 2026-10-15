@@ -27,11 +27,11 @@ public final class VpnRoutingTest extends InstrumentationTestCase {
             assertTrue("Training app did not return: "+LabVpnService.state,done.await(40,TimeUnit.SECONDS));
             assertEquals(LabVpnService.diagnostics(),"TCP_UDP_DNS_OK",result.get());
             long[] counters=LabVpnService.stats();assertTrue("Traffic bypassed native tunnel",counters[0]>0&&counters[2]>0);
-            context.stopService(new Intent(context,LabVpnService.class));
+            context.startService(new Intent(context,LabVpnService.class).setAction("stop"));
             until=System.currentTimeMillis()+5000;while(!LabVpnService.state.equals("STOPPED")&&System.currentTimeMillis()<until)Thread.sleep(25);
             assertEquals("STOPPED",LabVpnService.state);assertFalse(hev.htproxy.TProxyService.TProxyIsRunning());
         }finally{
-            context.unregisterReceiver(receiver);context.stopService(new Intent(context,LabVpnService.class));
+            context.unregisterReceiver(receiver);LabVpnService.stopNow();context.stopService(new Intent(context,LabVpnService.class));
             getInstrumentation().runOnMainSync(activity::finish);AuthSession.revoke();
         }
     }
@@ -62,7 +62,7 @@ public final class VpnRoutingTest extends InstrumentationTestCase {
             assertTrue(selected.request.contains("price=100"));proxy.decide(selected.id,selected.request.replace("price=100","price=1"),false);
             assertTrue("Training HTTPS request did not complete",done.await(20,TimeUnit.SECONDS));assertEquals(LabVpnService.diagnostics(),"HTTPS_EDITED_OK",result.get());
         }finally{
-            com.nexvary.trafficlab.tls.EmbeddedProxyService.engine=null;context.unregisterReceiver(receiver);context.stopService(new Intent(context,LabVpnService.class));
+            com.nexvary.trafficlab.tls.EmbeddedProxyService.engine=null;context.unregisterReceiver(receiver);LabVpnService.stopNow();context.stopService(new Intent(context,LabVpnService.class));
             long deadline=System.currentTimeMillis()+5000;while(!LabVpnService.state.equals("STOPPED")&&System.currentTimeMillis()<deadline)Thread.sleep(25);
             getInstrumentation().runOnMainSync(activity::finish);AuthSession.revoke();
         }
