@@ -40,7 +40,7 @@ public class MainActivity extends Activity {
     private final int panel2 = Color.rgb(4,15,27), line = Color.rgb(24,104,148), muted = Color.rgb(137,160,176);
 
     @Override protected void attachBaseContext(Context base) { super.attachBaseContext(LocaleController.wrap(base)); }
-    @Override public void onCreate(Bundle b) { super.onCreate(b); if(!AuthSession.isUnlocked()){ startActivity(new Intent(this,LoginActivity.class)); finish(); return; } getWindow().setStatusBarColor(bg); boolean serverOk=true; String serverError=""; try { server.start(); } catch(Exception e){ serverOk=false; serverError=e.getMessage()==null?e.getClass().getSimpleName():e.getMessage(); } build(); status.setText(serverOk?"● "+getString(R.string.authorized_mode)+" • 127.0.0.1:"+PORT:"● LAB SERVER ERROR • "+serverError); showDashboard(); }
+    @Override public void onCreate(Bundle b) { super.onCreate(b); if(!AuthSession.isUnlocked()){ startActivity(new Intent(this,LoginActivity.class)); finish(); return; } if(Build.VERSION.SDK_INT>=33)getOnBackInvokedDispatcher().registerOnBackInvokedCallback(android.window.OnBackInvokedDispatcher.PRIORITY_DEFAULT,this::goBack); getWindow().setStatusBarColor(bg); boolean serverOk=true; String serverError=""; try { server.start(); } catch(Exception e){ serverOk=false; serverError=e.getMessage()==null?e.getClass().getSimpleName():e.getMessage(); } build(); status.setText(serverOk?"● "+getString(R.string.authorized_mode)+" • 127.0.0.1:"+PORT:"● LAB SERVER ERROR • "+serverError); showDashboard(); }
     @Override protected void onDestroy() { server.stop(); super.onDestroy(); }
 
     private void build() {

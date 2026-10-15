@@ -72,7 +72,7 @@ public class NavigationExitTest extends InstrumentationTestCase {
     }
     public void testBackStackAndRepeatedTabs() throws Exception {
         click("nav:Intercept");click("nav:Intercept");click("nav:Repeater");click("nav:History");
-        click("nav:back");assertEquals("Repeater",route());click("nav:back");assertEquals("Intercept",route());
+        getInstrumentation().sendKeyDownUpSync(KeyEvent.KEYCODE_BACK);getInstrumentation().waitForIdleSync();assertEquals("Repeater",route());click("nav:back");assertEquals("Intercept",route());
         click("nav:back");assertEquals("Dashboard",route());click("nav:back");assertEquals("Dashboard",route());
     }
     public void testCapturedTrafficFeedsHistoryAndEvidence() throws Exception {
