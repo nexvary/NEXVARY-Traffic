@@ -1,0 +1,6 @@
+package com.nexvary.trafficlab.core;
+import java.util.*;
+public final class InteractiveReportBuilder {
+ public static String html(String title,List<HistoryEntry> es){PresenterDashboardModel.Snapshot s=PresenterDashboardModel.summarize(es);StringBuilder rows=new StringBuilder();for(HistoryEntry e:es)rows.append("<tr><td>").append(e.id).append("</td><td>").append(esc(e.request.method+" "+e.request.path)).append("</td><td>").append(e.response==null?"-":e.response.statusCode).append("</td><td>").append(RiskEngine.score(e.findings)).append("</td></tr>");return "<!doctype html><meta charset='utf-8'><title>"+esc(title)+"</title><style>body{font-family:system-ui;background:#061018;color:#c9d2da;padding:24px}h1{color:#00e5ff}.card{background:#0b1822;padding:16px;margin:12px 0;border:1px solid #334}table{width:100%;border-collapse:collapse}td,th{padding:8px;border-bottom:1px solid #334}</style><h1>NEXVARY Traffic Lab</h1><div class=card><b>"+esc(title)+"</b><br>Sessions: "+s.sessions()+" • Findings: "+s.findings()+" • Max risk: "+s.maxRisk()+"</div><div class=card><table><tr><th>#</th><th>Session</th><th>Status</th><th>Risk</th></tr>"+rows+"</table></div>";}
+ private static String esc(String s){return s==null?"":s.replace("&","&amp;").replace("<","&lt;").replace(">","&gt;").replace("\"","&quot;");}
+}

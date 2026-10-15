@@ -1,0 +1,9 @@
+<resources>
+    <color name="bg">#020912</color>
+    <color name="panel">#061422</color>
+    <color name="emerald">#0AB9FF</color>
+    <color name="electric_green">#39FF88</color>
+    <color name="gold">#DAB756</color>
+    <color name="silver">#E8EFF4</color>
+    <color name="danger">#FF586F</color>
+</resources>

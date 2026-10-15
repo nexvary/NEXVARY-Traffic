@@ -1,0 +1,11 @@
+.gradle/
+build/
+local.properties
+.idea/
+*.iml
+*.class
+.verify_classes/
+testbuild/out/
+*.jks
+*.keystore
+
