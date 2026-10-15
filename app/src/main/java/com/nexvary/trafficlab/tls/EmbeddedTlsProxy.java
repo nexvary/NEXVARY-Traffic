@@ -14,7 +14,7 @@ public final class EmbeddedTlsProxy implements AutoCloseable {
     public static final int MAX_BODY = 1024 * 1024, MAX_SAMPLE = 65536;
     public static final class Flow {
         public final long id; public final String host;
-        private final long started=System.currentTimeMillis();
+        private long forwardingStarted;
         private String sent=""; private boolean responseTruncated;
         public volatile String request = "", response = "", status = "CONNECTING", error = "";
         private final CountDownLatch decision = new CountDownLatch(1);
@@ -109,6 +109,7 @@ public final class EmbeddedTlsProxy implements AutoCloseable {
                     }
                 }
                 flow.sent=new String(request,StandardCharsets.UTF_8);
+                flow.forwardingStarted=System.nanoTime();
                 flow.status="FORWARDING";
                 try (Socket tcp=new Socket()) {
                     sockets.add(tcp);
@@ -132,7 +133,7 @@ public final class EmbeddedTlsProxy implements AutoCloseable {
         } catch(Exception error) {
             if(flow!=null) { flow.error=error.getClass().getSimpleName()+": "+error.getMessage(); flow.status="FAILED"; }
         } finally {
-            if(flow!=null && flow.status.equals("COMPLETE"))CapturedTraffic.completed(flow.request,flow.sent,flow.response,System.currentTimeMillis()-flow.started,flow.responseTruncated);
+            if(flow!=null && flow.status.equals("COMPLETE"))CapturedTraffic.completed(flow.request,flow.sent,flow.response,(System.nanoTime()-flow.forwardingStarted)/1000000L,flow.responseTruncated);
             sockets.remove(client);
         }
     }

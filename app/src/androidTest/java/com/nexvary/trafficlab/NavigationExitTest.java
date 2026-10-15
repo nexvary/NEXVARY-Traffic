@@ -26,6 +26,7 @@ public class NavigationExitTest extends InstrumentationTestCase {
     private Object field(String name) throws Exception {Field f=MainActivity.class.getDeclaredField(name);f.setAccessible(true);return f.get(activity);}
     private String route() throws Exception {return (String)field("currentScreen");}
     private View find(View root,String tag){if(tag.equals(root.getTag()))return root;if(root instanceof ViewGroup){ViewGroup g=(ViewGroup)root;for(int i=0;i<g.getChildCount();i++){View v=find(g.getChildAt(i),tag);if(v!=null)return v;}}return null;}
+    private void screenBounds(View view,Rect bounds){int[] location=new int[2];view.getLocationOnScreen(location);bounds.set(location[0],location[1],location[0]+view.getWidth(),location[1]+view.getHeight());}
     private void touch(Rect bounds){
         long now=SystemClock.uptimeMillis();
         MotionEvent down=MotionEvent.obtain(now,now,MotionEvent.ACTION_DOWN,bounds.centerX(),bounds.centerY(),0);
@@ -45,13 +46,13 @@ public class NavigationExitTest extends InstrumentationTestCase {
                 getInstrumentation().runOnMainSync(()->list.setSelectionFromTop(position,0));getInstrumentation().waitForIdleSync();
                 final Rect bounds=new Rect();getInstrumentation().runOnMainSync(()->{
                     View item=list.getChildAt(position-list.getFirstVisiblePosition());assertNotNull("Menu item absent "+tag,item);
-                    assertTrue("Menu item not visible "+tag,item.getGlobalVisibleRect(bounds));
+                    assertTrue("Menu item not visible "+tag,item.getGlobalVisibleRect(bounds));screenBounds(item,bounds);
                 });touch(bounds);return;
             }catch(Exception error){throw new AssertionError(error);}
         }
         getInstrumentation().runOnMainSync(()->{View view=found[0];assertNotNull("Missing button "+tag,view);view.requestRectangleOnScreen(new Rect(0,0,view.getWidth(),view.getHeight()),true);});
         getInstrumentation().waitForIdleSync();final Rect bounds=new Rect();
-        getInstrumentation().runOnMainSync(()->assertTrue("Button not visible "+tag,found[0].getGlobalVisibleRect(bounds)));touch(bounds);
+        getInstrumentation().runOnMainSync(()->{assertTrue("Button not visible "+tag,found[0].getGlobalVisibleRect(bounds));screenBounds(found[0],bounds);});touch(bounds);
     }
     private void collect(View root,Set<String> tags){Object tag=root.getTag();if(tag instanceof String && ((String)tag).startsWith("nav:") && !tag.equals("nav:back"))tags.add((String)tag);if(root instanceof ViewGroup){ViewGroup g=(ViewGroup)root;for(int i=0;i<g.getChildCount();i++)collect(g.getChildAt(i),tags);}}
     public void testEveryNavigationButtonAndBack() throws Exception {
