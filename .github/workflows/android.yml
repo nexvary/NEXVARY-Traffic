@@ -60,7 +60,7 @@ jobs:
           arch: x86_64
           profile: pixel_2
           disable-animations: true
-          script: gradle --no-daemon connectedDebugAndroidTest
+          script: bash ci/device-tests.sh
       - name: Collect device reports
         if: always()
         uses: actions/upload-artifact@v4
@@ -69,3 +69,4 @@ jobs:
           path: |
             app/build/reports/androidTests/
             app/build/outputs/androidTest-results/
+            device-logcat.txt
