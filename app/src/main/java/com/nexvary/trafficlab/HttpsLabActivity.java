@@ -9,6 +9,7 @@ import android.content.pm.ResolveInfo;
 import android.graphics.Color;
 import android.net.Uri;
 import android.os.Bundle;
+import android.view.View;
 import android.widget.*;
 import com.nexvary.trafficlab.core.PcapdroidCapturePlan;
 import java.util.*;
@@ -31,7 +32,7 @@ public class HttpsLabActivity extends Activity {
         page.setOrientation(LinearLayout.VERTICAL);
         page.setPadding(24, 24, 24, 24);
         page.setBackgroundColor(Color.rgb(2, 9, 18));
-        page.setLayoutDirection("ar".equals(LocaleController.getLanguage(this)) ? 1 : 0);
+        page.setLayoutDirection("ar".equals(LocaleController.getLanguage(this)) ? View.LAYOUT_DIRECTION_RTL : View.LAYOUT_DIRECTION_LTR);
         ScrollView scroll = new ScrollView(this); scroll.addView(page); setContentView(scroll);
         label(page, tr("مختبر HTTPS", "HTTPS Lab"), 25);
         label(page, tr("المحرك الخارجي: PCAPdroid + mitmproxy، على هذا الهاتف. هذه المرحلة تتحكم في الالتقاط؛ عرض البيانات المفكوكة يكون داخل PCAPdroid.",
