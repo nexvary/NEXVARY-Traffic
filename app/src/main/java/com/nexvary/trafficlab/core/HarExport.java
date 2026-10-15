@@ -15,7 +15,7 @@ public final class HarExport {
     private static String headers(String raw,boolean secrets){
         StringBuilder out=new StringBuilder("[");String[] lines=raw.split("\\r\\n");boolean first=true;
         for(int i=1;i<lines.length;i++){if(lines[i].isEmpty())break;int colon=lines[i].indexOf(':');if(colon<1)continue;String name=lines[i].substring(0,colon);if(!secrets&&sensitive(name))continue;
-            if(!first)out.append(',');first=false;out.append("{\"name\":").append(quote(name)).append(",\"value\":").append(quote(lines[i].substring(colon+1).trim())).append('}');}
+            if(!first)out.append(',');first=false;out.append("{\"name\":").append(quote(name)).append(",\"value\":").append(quote(!secrets&&!Arrays.asList("host","content-type","content-length","content-encoding","transfer-encoding").contains(name.toLowerCase(Locale.ROOT))?"<REDACTED>":lines[i].substring(colon+1).trim())).append('}');}
         return out.append(']').toString();
     }
     public static String create(List<CapturedTraffic.Exchange> exchanges,boolean includeSecrets){

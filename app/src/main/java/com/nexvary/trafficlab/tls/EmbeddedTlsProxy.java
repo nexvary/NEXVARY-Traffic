@@ -164,6 +164,10 @@ public final class EmbeddedTlsProxy implements AutoCloseable {
             if(flow!=null) { flow.error=error.getClass().getSimpleName()+": "+error.getMessage(); flow.status="FAILED"; }
         } finally {
             if(flow!=null && flow.status.equals("COMPLETE"))CapturedTraffic.completed(captureGeneration,flow.request,flow.sent,flow.response,flow.upstreamElapsed,flow.responseTruncated);
+            if(flow!=null){
+                if(flow.request.length()>MAX_SAMPLE)flow.request=flow.request.substring(0,MAX_SAMPLE);
+                flow.sent="";flow.edited=null;flow.responseEdited=null;flow.responseTemplate="";
+            }
             sockets.remove(client);
         }
     }

@@ -47,7 +47,9 @@ public final class NativeTunnelTest extends InstrumentationTestCase {
                 assertEquals(ipv6?6:4,answer[0]>>>4);assertEquals(32000,word(answer,h+2));assertEquals(expected.length,count-h-8);
                 assertEquals(new String(expected,StandardCharsets.US_ASCII),new String(answer,h+8,count-h-8,StandardCharsets.US_ASCII));
                 response.get(5,TimeUnit.SECONDS);
-                assertTrue(TProxyService.TProxyGetStats()[0]>0);assertTrue(TProxyService.TProxyGetStats()[2]>0);
+                long deadline=System.currentTimeMillis()+2000;long[] stats=TProxyService.TProxyGetStats();
+                while((stats[0]==0||stats[2]==0)&&System.currentTimeMillis()<deadline){Thread.sleep(10);stats=TProxyService.TProxyGetStats();}
+                assertTrue("Native counters: "+java.util.Arrays.toString(stats),stats[0]>0&&stats[2]>0);
             }finally{
                 TProxyService.TProxyStopService();assertFalse(TProxyService.TProxyIsRunning());nativeFd.close();Os.close(left);Os.close(right);config.delete();threads.shutdownNow();
             }

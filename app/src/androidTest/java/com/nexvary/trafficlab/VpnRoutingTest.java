@@ -35,4 +35,37 @@ public final class VpnRoutingTest extends InstrumentationTestCase {
             getInstrumentation().runOnMainSync(activity::finish);AuthSession.revoke();
         }
     }
+    public void testVpnHttpsInspectionFromSeparateApplication()throws Exception{
+        Context context=getInstrumentation().getTargetContext();AuthSession.grant();
+        Activity activity=getInstrumentation().startActivitySync(new Intent(context,MainActivity.class).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK));
+        CountDownLatch done=new CountDownLatch(1);AtomicReference<String> result=new AtomicReference<>();
+        BroadcastReceiver receiver=new BroadcastReceiver(){public void onReceive(Context c,Intent intent){result.set(intent.getStringExtra("result"));done.countDown();}};
+        context.registerReceiver(receiver,new IntentFilter("com.nexvary.trafficlab.FIXTURE_RESULT"),Context.RECEIVER_EXPORTED);
+        com.nexvary.trafficlab.tls.LabCertificateAuthority ca=com.nexvary.trafficlab.tls.LabCertificateAuthority.open(context);
+        java.security.cert.Certificate certificate;
+        try(android.os.ParcelFileDescriptor data=getInstrumentation().getUiAutomation().executeShellCommand("cat /data/local/tmp/nexvary-fixture-ca.der");
+            java.io.InputStream in=new android.os.ParcelFileDescriptor.AutoCloseInputStream(data)){
+            certificate=java.security.cert.CertificateFactory.getInstance("X.509").generateCertificate(in);
+        }
+        java.security.KeyStore trust=java.security.KeyStore.getInstance(java.security.KeyStore.getDefaultType());trust.load(null);trust.setCertificateEntry("fixture",certificate);
+        javax.net.ssl.TrustManagerFactory tm=javax.net.ssl.TrustManagerFactory.getInstance(javax.net.ssl.TrustManagerFactory.getDefaultAlgorithm());tm.init(trust);
+        javax.net.ssl.SSLContext trusted=javax.net.ssl.SSLContext.getInstance("TLS");trusted.init(null,tm.getTrustManagers(),null);
+        try(com.nexvary.trafficlab.tls.EmbeddedTlsProxy proxy=new com.nexvary.trafficlab.tls.EmbeddedTlsProxy(ca,"10.0.2.2",18779,true,trusted)){
+            proxy.start(8888);com.nexvary.trafficlab.tls.EmbeddedProxyService.engine=proxy;
+            getInstrumentation().runOnMainSync(()->context.startForegroundService(new Intent(context,LabVpnService.class).putExtra("packages",new String[]{"com.nexvary.trafficfixture"}).putExtra("host","10.0.2.2").putExtra("port",18779)));
+            long deadline=System.currentTimeMillis()+10000;while(!LabVpnService.state.equals("RUNNING")&&System.currentTimeMillis()<deadline)Thread.sleep(25);assertEquals("RUNNING",LabVpnService.state);
+            Thread.sleep(500);
+            context.startActivity(new Intent().setClassName("com.nexvary.trafficfixture","com.nexvary.trafficfixture.TrafficFixtureActivity").addFlags(Intent.FLAG_ACTIVITY_NEW_TASK).putExtra("mode","https").putExtra("certificate",ca.encoded()));
+            com.nexvary.trafficlab.tls.EmbeddedTlsProxy.Flow selected=null;deadline=System.currentTimeMillis()+10000;
+            while(selected==null&&System.currentTimeMillis()<deadline){for(com.nexvary.trafficlab.tls.EmbeddedTlsProxy.Flow flow:proxy.flows())if(flow.status.equals("PAUSED"))selected=flow;if(selected==null)Thread.sleep(10);}
+            assertNotNull("VPN did not reach HTTPS inspection: "+LabVpnService.diagnostics()+" / "+result.get(),selected);
+            assertTrue(selected.request.contains("price=100"));proxy.decide(selected.id,selected.request.replace("price=100","price=1"),false);
+            assertTrue("Training HTTPS request did not complete",done.await(20,TimeUnit.SECONDS));assertEquals(LabVpnService.diagnostics(),"HTTPS_EDITED_OK",result.get());
+        }finally{
+            com.nexvary.trafficlab.tls.EmbeddedProxyService.engine=null;context.unregisterReceiver(receiver);context.stopService(new Intent(context,LabVpnService.class));
+            long deadline=System.currentTimeMillis()+5000;while(!LabVpnService.state.equals("STOPPED")&&System.currentTimeMillis()<deadline)Thread.sleep(25);
+            getInstrumentation().runOnMainSync(activity::finish);AuthSession.revoke();
+        }
+    }
+
 }

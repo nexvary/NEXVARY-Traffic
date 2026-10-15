@@ -54,6 +54,9 @@ public final class CaptureFiles {
     }
     public static List<String[]> parse(String content)throws Exception{
         if(content.getBytes(StandardCharsets.UTF_8).length>MAX_FILE)throw new IOException("HAR exceeds limit");
+        int nesting=0;boolean quoted=false,escaped=false;
+        for(int i=0;i<content.length();i++){char c=content.charAt(i);if(quoted){if(escaped)escaped=false;else if(c=='\\')escaped=true;else if(c=='"')quoted=false;}
+            else if(c=='"')quoted=true;else if(c=='{'||c=='['){if(++nesting>32)throw new IOException("HAR nesting exceeds limit");}else if(c=='}'||c==']')nesting--;}
         JSONArray entries=new JSONObject(content).getJSONObject("log").getJSONArray("entries");if(entries.length()>32)throw new IOException("Import at most 32 exchanges per file");
         List<String[]> parsed=new ArrayList<>();
         for(int i=0;i<entries.length();i++){

@@ -7,6 +7,7 @@ fixture_pid=$!
 trap 'kill "$fixture_pid" 2>/dev/null || true' EXIT
 gradle --no-daemon :app:installDebug :fixture:installDebug || exit $?
 adb shell appops set com.nexvary.trafficlab ACTIVATE_VPN allow
+adb push fixture-ca.der /data/local/tmp/nexvary-fixture-ca.der
 gradle --no-daemon :app:connectedDebugAndroidTest
 test_status=$?
 adb logcat -d > device-logcat.txt

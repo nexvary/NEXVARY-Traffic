@@ -10,6 +10,7 @@ public final class TrafficFixtureActivity extends Activity {
     @Override public void onCreate(Bundle saved){super.onCreate(saved);new Thread(()->{
         String result;
         try{
+            if("https".equals(getIntent().getStringExtra("mode"))){https();return;}
             String tcp;
             try(Socket socket=new Socket()){
                 socket.connect(new InetSocketAddress("10.0.2.2",18777),10000);socket.setSoTimeout(10000);
@@ -39,4 +40,23 @@ public final class TrafficFixtureActivity extends Activity {
         sendBroadcast(new Intent("com.nexvary.trafficlab.FIXTURE_RESULT").setPackage("com.nexvary.trafficlab").putExtra("result",result));
         runOnUiThread(this::finish);
     },"fixture-traffic").start();}
+    private void https(){
+        String result;
+        try{
+            java.security.KeyStore trust=java.security.KeyStore.getInstance(java.security.KeyStore.getDefaultType());trust.load(null);
+            java.security.cert.Certificate certificate=java.security.cert.CertificateFactory.getInstance("X.509").generateCertificate(new ByteArrayInputStream(getIntent().getByteArrayExtra("certificate")));trust.setCertificateEntry("lab",certificate);
+            javax.net.ssl.TrustManagerFactory tm=javax.net.ssl.TrustManagerFactory.getInstance(javax.net.ssl.TrustManagerFactory.getDefaultAlgorithm());tm.init(trust);
+            javax.net.ssl.SSLContext tls=javax.net.ssl.SSLContext.getInstance("TLS");tls.init(null,tm.getTrustManagers(),null);
+            try(javax.net.ssl.SSLSocket socket=(javax.net.ssl.SSLSocket)tls.getSocketFactory().createSocket("10.0.2.2",18779)){
+                socket.setSoTimeout(15000);javax.net.ssl.SSLParameters parameters=socket.getSSLParameters();parameters.setEndpointIdentificationAlgorithm("HTTPS");socket.setSSLParameters(parameters);socket.startHandshake();
+                byte[] body="price=100".getBytes(StandardCharsets.US_ASCII);
+                socket.getOutputStream().write(("POST /lesson HTTP/1.1\r\nHost: 10.0.2.2\r\nContent-Length: "+body.length+"\r\nConnection: close\r\n\r\n").getBytes(StandardCharsets.US_ASCII));socket.getOutputStream().write(body);socket.getOutputStream().flush();
+                ByteArrayOutputStream out=new ByteArrayOutputStream();byte[] b=new byte[1024];int n;while((n=socket.getInputStream().read(b))!=-1)out.write(b,0,n);
+                String response=out.toString("UTF-8");if(!response.contains("accepted:price=1")||response.contains("price=100"))throw new IOException("Edited HTTPS response absent");
+            }
+            result="HTTPS_EDITED_OK";
+        }catch(Exception error){result="ERROR: "+error;}
+        sendBroadcast(new Intent("com.nexvary.trafficlab.FIXTURE_RESULT").setPackage("com.nexvary.trafficlab").putExtra("result",result));runOnUiThread(this::finish);
+    }
+
 }
