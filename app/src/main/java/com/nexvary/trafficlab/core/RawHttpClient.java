@@ -17,7 +17,7 @@ public final class RawHttpClient {
             ByteArrayOutputStream buf = new ByteArrayOutputStream();
             InputStream in = s.getInputStream(); byte[] chunk = new byte[4096]; int n;
             while ((n = in.read(chunk)) >= 0) buf.write(chunk,0,n);
-            String raw = buf.toString(StandardCharsets.UTF_8);
+            String raw = new String(buf.toByteArray(), StandardCharsets.UTF_8);
             LabResponse res = new LabResponse(); res.raw = raw;
             int lineEnd = raw.indexOf("\r\n"); res.statusLine = lineEnd > 0 ? raw.substring(0,lineEnd) : raw;
             String[] parts = res.statusLine.split(" "); if (parts.length > 1) try { res.statusCode = Integer.parseInt(parts[1]); } catch(Exception ignored) {}

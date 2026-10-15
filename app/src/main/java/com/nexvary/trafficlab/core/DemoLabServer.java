@@ -72,8 +72,14 @@ public class DemoLabServer {
                 }
             }
             if (contentLength < 0 || contentLength > MAX_BODY_BYTES) { respond(out,413,"{\"ok\":false,\"error\":\"body too large\"}"); return; }
-            byte[] bodyBytes = in.readNBytes(contentLength);
-            if (bodyBytes.length != contentLength) { respond(out,400,"{\"ok\":false,\"error\":\"incomplete body\"}"); return; }
+            byte[] bodyBytes = new byte[contentLength];
+            int received = 0;
+            while (received < contentLength) {
+                int count = in.read(bodyBytes, received, contentLength - received);
+                if (count < 0) break;
+                received += count;
+            }
+            if (received != contentLength) { respond(out,400,"{\"ok\":false,\"error\":\"incomplete body\"}"); return; }
             String body = new String(bodyBytes, StandardCharsets.UTF_8);
             String path = requestLine[1];
             if (path.equals("/api/order")) {
