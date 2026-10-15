@@ -33,6 +33,7 @@ public final class EmbeddedTlsProxy implements AutoCloseable {
     private final ThreadPoolExecutor workers = new ThreadPoolExecutor(4,4,0,TimeUnit.SECONDS,new ArrayBlockingQueue<>(8));
     private volatile ServerSocket listener;
     private volatile boolean running;
+    private long captureGeneration;
     public EmbeddedTlsProxy(LabCertificateAuthority ca, String host, int port, boolean pause) throws Exception {
         this(ca, host, port, pause, SSLContext.getDefault());
     }
@@ -44,6 +45,7 @@ public final class EmbeddedTlsProxy implements AutoCloseable {
     public synchronized int start(int port) throws IOException {
         if (running) return listener.getLocalPort();
         listener = new ServerSocket(); listener.bind(new InetSocketAddress(InetAddress.getByName("127.0.0.1"),port));
+        captureGeneration=CapturedTraffic.openSession();
         running=true;
         Thread accept = new Thread(() -> {
             while (running) {
@@ -133,7 +135,7 @@ public final class EmbeddedTlsProxy implements AutoCloseable {
         } catch(Exception error) {
             if(flow!=null) { flow.error=error.getClass().getSimpleName()+": "+error.getMessage(); flow.status="FAILED"; }
         } finally {
-            if(flow!=null && flow.status.equals("COMPLETE"))CapturedTraffic.completed(flow.request,flow.sent,flow.response,(System.nanoTime()-flow.forwardingStarted)/1000000L,flow.responseTruncated);
+            if(flow!=null && flow.status.equals("COMPLETE"))CapturedTraffic.completed(captureGeneration,flow.request,flow.sent,flow.response,(System.nanoTime()-flow.forwardingStarted)/1000000L,flow.responseTruncated);
             sockets.remove(client);
         }
     }

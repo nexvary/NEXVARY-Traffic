@@ -12,6 +12,13 @@ public class CapturedTrafficTest {
         for(int i=0;i<40;i++)CapturedTraffic.completed(original,forwarded,"x".repeat(40000),i,false);
         if(CapturedTraffic.all().size()!=32||!CapturedTraffic.all().get(0).prefixOnly()||CapturedTraffic.all().get(0).response().length()!=32768)throw new AssertionError("Retention/prefix budget");
         CapturedTraffic.clear();if(!CapturedTraffic.all().isEmpty())throw new AssertionError("Clear");
+        long stale=CapturedTraffic.openSession();CapturedTraffic.endSession();
+        CapturedTraffic.completed(stale,original,forwarded,"late",1,false);
+        if(!CapturedTraffic.all().isEmpty())throw new AssertionError("Late worker repopulated an exited session");
+        CapturedTraffic.openSession();CapturedTraffic.completed(stale,original,forwarded,"stale",1,false);
+        if(!CapturedTraffic.all().isEmpty())throw new AssertionError("Old worker entered a new session");
+        CapturedTraffic.completed(original,forwarded,"new",1,false);
+        if(CapturedTraffic.all().size()!=1)throw new AssertionError("New session rejected");CapturedTraffic.clear();
         System.out.println("CAPTURED_TRAFFIC_OK");
     }
 }

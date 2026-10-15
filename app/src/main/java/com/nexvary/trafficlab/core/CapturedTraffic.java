@@ -6,9 +6,17 @@ public final class CapturedTraffic {
     public record Exchange(String id,String original,String forwarded,String response,long elapsedMs,boolean prefixOnly) { }
     private static final Deque<Exchange> exchanges=new ArrayDeque<>();
     private static final int LIMIT=32768;
+    private static long generation;
+    private static boolean accepting=true;
+    public static synchronized long openSession(){accepting=true;return ++generation;}
+    public static synchronized void endSession(){accepting=false;generation++;exchanges.clear();}
     private CapturedTraffic() { }
     private static String prefix(String value){return value.substring(0,Math.min(value.length(),LIMIT));}
     public static synchronized void completed(String original,String forwarded,String response,long elapsedMs,boolean truncated){
+        completed(generation,original,forwarded,response,elapsedMs,truncated);
+    }
+    public static synchronized void completed(long session,String original,String forwarded,String response,long elapsedMs,boolean truncated){
+        if(!accepting||session!=generation)return;
         boolean prefixOnly=truncated||original.length()>LIMIT||forwarded.length()>LIMIT||response.length()>LIMIT;
         exchanges.addLast(new Exchange(UUID.randomUUID().toString(),prefix(original),prefix(forwarded),prefix(response),elapsedMs,prefixOnly));
         while(exchanges.size()>32)exchanges.removeFirst();

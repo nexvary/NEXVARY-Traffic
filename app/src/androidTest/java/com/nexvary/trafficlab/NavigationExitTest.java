@@ -74,6 +74,7 @@ public class NavigationExitTest extends InstrumentationTestCase {
     }
     public void testCapturedTrafficFeedsHistoryAndEvidence() throws Exception {
         String raw="GET /captured-lesson HTTP/1.1\r\nHost: lab.example\r\n\r\n";
+        com.nexvary.trafficlab.core.CapturedTraffic.openSession();
         com.nexvary.trafficlab.core.CapturedTraffic.completed(raw,raw,"HTTP/1.1 200 OK\r\n\r\ntraining-response",12,false);
         click("nav:History");
         com.nexvary.trafficlab.core.HistoryStore history=(com.nexvary.trafficlab.core.HistoryStore)field("history");

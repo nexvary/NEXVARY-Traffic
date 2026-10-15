@@ -376,7 +376,7 @@ public class MainActivity extends Activity {
         stopService(new Intent(this, com.nexvary.trafficlab.vpn.LabVpnService.class));
         stopService(new Intent(this, com.nexvary.trafficlab.tls.EmbeddedProxyService.class));
         server.stop();
-        CapturedTraffic.clear();
+        CapturedTraffic.endSession();
         finishAndRemoveTask();
     }
     private String headers(LabRequest r){StringBuilder b=new StringBuilder();for(var e:r.headers.entrySet())b.append(e.getKey()).append(": ").append(e.getValue()).append('\n');return b.toString();}
