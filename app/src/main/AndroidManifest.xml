@@ -3,6 +3,13 @@
     <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_SPECIAL_USE" />
+    <queries>
+        <package android:name="com.emanuelef.remote_capture" />
+        <intent>
+            <action android:name="android.intent.action.MAIN" />
+            <category android:name="android.intent.category.LAUNCHER" />
+        </intent>
+    </queries>
     <application
         android:allowBackup="false"
         android:icon="@drawable/ic_launcher_nexvary"
@@ -11,6 +18,7 @@
         android:theme="@style/AppTheme"
         android:supportsRtl="true"
         android:usesCleartextTraffic="false">
+        <activity android:name=".HttpsLabActivity" android:exported="false" />
         <activity
             android:name=".MainActivity"
             android:screenOrientation="portrait"
@@ -36,3 +44,4 @@
         </service>
     </application>
 </manifest>
+
