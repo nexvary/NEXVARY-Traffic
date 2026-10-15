@@ -19,6 +19,9 @@ android {
         buildConfigField 'String', 'RECOVERY_ENDPOINT', '"' + (project.findProperty('nexvaryRecoveryEndpoint') ?: '') + '"'
     }
 
+    packaging {
+        resources { excludes += "META-INF/versions/9/OSGI-INF/MANIFEST.MF" }
+    }
     buildFeatures {
         buildConfig true
     }

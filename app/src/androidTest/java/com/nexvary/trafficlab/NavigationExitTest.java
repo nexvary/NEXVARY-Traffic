@@ -4,6 +4,8 @@ import android.app.*;
 import android.content.Intent;
 import android.test.InstrumentationTestCase;
 import android.view.*;
+import android.graphics.Rect;
+import android.os.SystemClock;
 import com.nexvary.trafficlab.tls.EmbeddedProxyService;
 import java.lang.reflect.Field;
 import java.net.*;
@@ -24,7 +26,16 @@ public class NavigationExitTest extends InstrumentationTestCase {
     private Object field(String name) throws Exception {Field f=MainActivity.class.getDeclaredField(name);f.setAccessible(true);return f.get(activity);}
     private String route() throws Exception {return (String)field("currentScreen");}
     private View find(View root,String tag){if(tag.equals(root.getTag()))return root;if(root instanceof ViewGroup){ViewGroup g=(ViewGroup)root;for(int i=0;i<g.getChildCount();i++){View v=find(g.getChildAt(i),tag);if(v!=null)return v;}}return null;}
-    private void click(String tag){getInstrumentation().runOnMainSync(()->{View view=find(activity.getWindow().getDecorView(),tag);assertNotNull("Missing button "+tag,view);assertTrue("Click failed "+tag,view.performClick());});getInstrumentation().waitForIdleSync();}
+    private void click(String tag){
+        getInstrumentation().runOnMainSync(()->{View view=find(activity.getWindow().getDecorView(),tag);assertNotNull("Missing button "+tag,view);view.requestRectangleOnScreen(new Rect(0,0,view.getWidth(),view.getHeight()),true);});
+        getInstrumentation().waitForIdleSync();final Rect bounds=new Rect();
+        getInstrumentation().runOnMainSync(()->{View view=find(activity.getWindow().getDecorView(),tag);assertTrue("Button not visible "+tag,view.getGlobalVisibleRect(bounds));});
+        long now=SystemClock.uptimeMillis();
+        MotionEvent down=MotionEvent.obtain(now,now,MotionEvent.ACTION_DOWN,bounds.centerX(),bounds.centerY(),0);
+        MotionEvent up=MotionEvent.obtain(now,now+50,MotionEvent.ACTION_UP,bounds.centerX(),bounds.centerY(),0);
+        try{getInstrumentation().sendPointerSync(down);getInstrumentation().sendPointerSync(up);}finally{down.recycle();up.recycle();}
+        getInstrumentation().waitForIdleSync();
+    }
     private void collect(View root,Set<String> tags){Object tag=root.getTag();if(tag instanceof String && ((String)tag).startsWith("nav:") && !tag.equals("nav:back"))tags.add((String)tag);if(root instanceof ViewGroup){ViewGroup g=(ViewGroup)root;for(int i=0;i<g.getChildCount();i++)collect(g.getChildAt(i),tags);}}
     public void testEveryNavigationButtonAndBack() throws Exception {
         Set<String> tags=new LinkedHashSet<>();getInstrumentation().runOnMainSync(()->collect(activity.getWindow().getDecorView(),tags));
