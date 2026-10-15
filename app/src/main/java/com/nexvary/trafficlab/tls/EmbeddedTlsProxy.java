@@ -2,6 +2,7 @@ package com.nexvary.trafficlab.tls;
 
 import javax.net.ssl.*;
 import com.nexvary.trafficlab.core.CapturedTraffic;
+import com.nexvary.trafficlab.core.Http1Body;
 import java.net.*;
 import java.io.*;
 import java.nio.charset.StandardCharsets;
@@ -96,10 +97,9 @@ public final class EmbeddedTlsProxy implements AutoCloseable {
                 decrypted.setUseClientMode(false); decrypted.setSoTimeout(15000); decrypted.startHandshake();
                 String head=headers(decrypted.getInputStream());
                 if(head.toLowerCase(Locale.ROOT).contains("\r\nexpect:")) throw new IOException("Expect negotiation not supported yet");
-                int length=contentLength(head);
-                byte[] body=new byte[length]; new DataInputStream(decrypted.getInputStream()).readFully(body);
-                flow.request=head+new String(body,StandardCharsets.UTF_8);
+                byte[] body=Http1Body.read(head,decrypted.getInputStream(),MAX_BODY);
                 byte[] request=normalize(head,body);
+                flow.request=head.toLowerCase(Locale.ROOT).contains("transfer-encoding:")?new String(request,StandardCharsets.UTF_8):head+new String(body,StandardCharsets.UTF_8);
                 if(pause) {
                     flow.status="PAUSED";
                     if(!flow.decision.await(120,TimeUnit.SECONDS)) throw new IOException("Paused request expired");
@@ -149,24 +149,11 @@ public final class EmbeddedTlsProxy implements AutoCloseable {
             int colon=lines[i].indexOf(':'); if(colon<1) throw new IOException("Malformed header");
             String name=lines[i].substring(0,colon);
             if(!name.matches("[!#$%&'*+.^_`|~0-9A-Za-z-]+")) throw new IOException("Invalid header name");
-            if(name.equalsIgnoreCase("Transfer-Encoding") || name.equalsIgnoreCase("Upgrade")) throw new IOException("Chunked requests and protocol upgrades are not supported yet");
-            if(!name.equalsIgnoreCase("Host") && !name.equalsIgnoreCase("Content-Length") && !name.equalsIgnoreCase("Connection") && !name.equalsIgnoreCase("Proxy-Connection")) normalized.append(lines[i]).append("\r\n");
+            if(name.equalsIgnoreCase("Upgrade")) throw new IOException("Protocol upgrades are not supported yet");
+            if(!name.equalsIgnoreCase("Transfer-Encoding") && !name.equalsIgnoreCase("Trailer") && !name.equalsIgnoreCase("Host") && !name.equalsIgnoreCase("Content-Length") && !name.equalsIgnoreCase("Connection") && !name.equalsIgnoreCase("Proxy-Connection")) normalized.append(lines[i]).append("\r\n");
         }
         normalized.append("Content-Length: ").append(body.length).append("\r\nConnection: close\r\n\r\n");
         ByteArrayOutputStream out=new ByteArrayOutputStream(); out.write(normalized.toString().getBytes(StandardCharsets.ISO_8859_1)); out.write(body); return out.toByteArray();
-    }
-    private static int contentLength(String head) throws IOException {
-        int length=0; boolean seen=false;
-        for(String line:head.split("\r\n")) {
-            int colon=line.indexOf(':'); if(colon<1) continue;
-            String name=line.substring(0,colon);
-            if(name.equalsIgnoreCase("Transfer-Encoding")) throw new IOException("Chunked requests are not supported yet");
-            if(name.equalsIgnoreCase("Content-Length")) {
-                if(seen) throw new IOException("Duplicate Content-Length"); seen=true;
-                try {length=Integer.parseInt(line.substring(colon+1).trim());}catch(NumberFormatException e){throw new IOException("Invalid Content-Length");}
-            }
-        }
-        if(length<0 || length>MAX_BODY) throw new IOException("Request body exceeds limit"); return length;
     }
     private static String headers(InputStream in) throws IOException {
         ByteArrayOutputStream bytes=new ByteArrayOutputStream(); int last=0;

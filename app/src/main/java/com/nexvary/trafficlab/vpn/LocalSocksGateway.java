@@ -14,7 +14,9 @@ public final class LocalSocksGateway implements AutoCloseable {
         boolean protect(Socket socket);
         boolean protect(DatagramSocket socket);
     }
+    public interface Resolver { InetAddress resolve(String host) throws UnknownHostException; }
     private final Protector protector;
+    private final Resolver resolver;
     private final String inspectHost;
     private final int inspectPort, proxyPort;
     private final Supplier<Boolean> inspectEnabled;
@@ -25,7 +27,10 @@ public final class LocalSocksGateway implements AutoCloseable {
     private volatile boolean running;
     private ServerSocket server;
     public LocalSocksGateway(Protector protector,String host,int port,int proxyPort,Supplier<Boolean> enabled) {
-        this.protector=protector;inspectHost=host;inspectPort=port;this.proxyPort=proxyPort;inspectEnabled=enabled;
+        this(protector,host,port,proxyPort,enabled,InetAddress::getByName);
+    }
+    public LocalSocksGateway(Protector protector,String host,int port,int proxyPort,Supplier<Boolean> enabled,Resolver resolver) {
+        this.resolver=resolver;this.protector=protector;inspectHost=host;inspectPort=port;this.proxyPort=proxyPort;inspectEnabled=enabled;
         byte[] secret=new byte[24];new SecureRandom().nextBytes(secret);
         password=Base64.getUrlEncoder().withoutPadding().encodeToString(secret);
     }
@@ -80,7 +85,7 @@ public final class LocalSocksGateway implements AutoCloseable {
         try(remote){
             if(!protector.protect(remote))throw new IOException("Socket protection failed");
             boolean inspect=inspectHost!=null && inspectHost.equalsIgnoreCase(host) && port==inspectPort && inspectEnabled.get();
-            remote.connect(new InetSocketAddress(inspect?"127.0.0.1":host,inspect?proxyPort:port),5000);remote.setSoTimeout(180000);
+            remote.connect(new InetSocketAddress(resolver.resolve(inspect?"127.0.0.1":host),inspect?proxyPort:port),5000);remote.setSoTimeout(180000);
             if(inspect){
                 remote.getOutputStream().write(("CONNECT "+inspectHost+":"+inspectPort+" HTTP/1.1\r\nHost: "+inspectHost+"\r\n\r\n").getBytes(StandardCharsets.US_ASCII));remote.getOutputStream().flush();
                 String header=readHeaders(remote.getInputStream());
@@ -120,7 +125,7 @@ public final class LocalSocksGateway implements AutoCloseable {
                     DataInputStream data=new DataInputStream(new ByteArrayInputStream(buffer,0,packet.getLength()));
                     if(data.readUnsignedShort()!=0||data.readUnsignedByte()!=0)continue;
                     String h=address(data,data.readUnsignedByte());int p=data.readUnsignedShort();
-                    InetSocketAddress target=new InetSocketAddress(InetAddress.getByName(h),p);
+                    InetSocketAddress target=new InetSocketAddress(resolver.resolve(h),p);
                     if(!permitted.contains(target)&&permitted.size()>=64)continue;
                     peer.compareAndSet(null,sender);permitted.add(target);
                     byte[] payload=new byte[data.available()];data.readFully(payload);remote.send(new DatagramPacket(payload,payload.length,target));

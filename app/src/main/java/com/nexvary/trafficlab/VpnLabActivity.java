@@ -24,7 +24,7 @@ public final class VpnLabActivity extends Activity {
     @Override protected void attachBaseContext(Context base){super.attachBaseContext(LocaleController.wrap(base));}
     @Override public void onCreate(Bundle saved){
         super.onCreate(saved);if(!AuthSession.isUnlocked()){startActivity(new Intent(this,LoginActivity.class));finish();return;}
-        LinearLayout page=new LinearLayout(this);page.setOrientation(1);page.setPadding(24,24,24,24);page.setBackgroundColor(Color.rgb(2,9,18));
+        LinearLayout page=new LinearLayout(this);page.setOrientation(LinearLayout.VERTICAL);page.setPadding(24,24,24,24);page.setBackgroundColor(Color.rgb(2,9,18));
         page.setLayoutDirection("ar".equals(LocaleController.getLanguage(this))?View.LAYOUT_DIRECTION_RTL:View.LAYOUT_DIRECTION_LTR);
         ScrollView scroll=new ScrollView(this);scroll.addView(page);setContentView(scroll);
         text(page,tr("شبكة المختبر المدمجة","Integrated VPN Lab"),24);
@@ -36,7 +36,7 @@ public final class VpnLabActivity extends Activity {
         text(page,tr("فك HTTPS اختياري: شغّل محرك HTTPS وثبّت الثقة بشهادته أولًا. يُفحص اسم خادم المختبر المحدد فقط عند استخدام DNS المختبر. بقية الاتصالات تمر كما هي. Pinning وDNS المشفر قد يمنعان الفحص.",
             "HTTPS inspection is optional: start the HTTPS engine and configure CA trust first. Only the configured lab hostname is inspected via lab DNS. Other connections pass through. Pinning and encrypted DNS can prevent inspection."),14);
         host=input(page,getIntent().getStringExtra("host")==null?"api.training.example":getIntent().getStringExtra("host"),"vpn:host");
-        port=input(page,String.valueOf(getIntent().getIntExtra("port",443)),"vpn:port");port.setInputType(2);
+        port=input(page,String.valueOf(getIntent().getIntExtra("port",443)),"vpn:port");port.setInputType(android.text.InputType.TYPE_CLASS_NUMBER);
         status=text(page,LabVpnService.state,14);status.setTag("vpn:state");
         button(page,tr("تشغيل VPN للتطبيقات المحددة","Start VPN for selected apps"),"vpn:start",()->{
             try{selection();Intent consent=VpnService.prepare(this);if(consent!=null)startActivityForResult(consent,91);else start();}

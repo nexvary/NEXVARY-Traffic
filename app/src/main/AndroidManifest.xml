@@ -13,6 +13,7 @@
         android:theme="@style/AppTheme"
         android:supportsRtl="true"
         android:usesCleartextTraffic="false">
+        <activity android:name=".SessionArchiveActivity" android:exported="false" />
         <activity android:name=".VpnLabActivity" android:exported="false" />
         <activity android:name=".HttpsLabActivity" android:exported="false" />
         <activity

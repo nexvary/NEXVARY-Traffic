@@ -121,6 +121,19 @@ public class NavigationExitTest extends InstrumentationTestCase {
         Activity login=getInstrumentation().waitForMonitorWithTimeout(loginMonitor,5000);assertNotNull("Reopening after exit did not require login",login);
         getInstrumentation().runOnMainSync(()->login.finish());getInstrumentation().removeMonitor(loginMonitor);
     }
+    public void testVpnAndArchiveNavigationReturnsToHistory() throws Exception {
+        click("nav:History");
+        Instrumentation.ActivityMonitor archiveMonitor=getInstrumentation().addMonitor(SessionArchiveActivity.class.getName(),null,false);
+        click("history:archive");Activity archive=getInstrumentation().waitForMonitorWithTimeout(archiveMonitor,5000);assertNotNull(archive);
+        getInstrumentation().runOnMainSync(()->{View back=find(archive.getWindow().getDecorView(),"archive:back");assertNotNull(back);back.performClick();});
+        getInstrumentation().waitForIdleSync();assertEquals("History",route());getInstrumentation().removeMonitor(archiveMonitor);
+        click("nav:Packet Lab");
+        Instrumentation.ActivityMonitor vpnMonitor=getInstrumentation().addMonitor(VpnLabActivity.class.getName(),null,false);
+        click("packet:vpn");Activity vpn=getInstrumentation().waitForMonitorWithTimeout(vpnMonitor,5000);assertNotNull(vpn);
+        getInstrumentation().runOnMainSync(()->{View back=find(vpn.getWindow().getDecorView(),"vpn:back");assertNotNull(back);back.performClick();});
+        getInstrumentation().waitForIdleSync();assertEquals("Packet Lab",route());getInstrumentation().removeMonitor(vpnMonitor);
+        click("nav:back");assertEquals("History",route());
+    }
     public void testArabicNavigation() throws Exception {
         getInstrumentation().runOnMainSync(()->activity.finish());getInstrumentation().waitForIdleSync();
         LocaleController.setLanguage(getInstrumentation().getTargetContext(),"ar");AuthSession.grant();

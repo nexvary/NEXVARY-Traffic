@@ -18,7 +18,7 @@ public final class NativeTunnelTest extends InstrumentationTestCase {
     private static byte[] udp(boolean ipv6,int port,byte[] payload)throws Exception{
         int h=ipv6?40:20;byte[] packet=new byte[h+8+payload.length];
         byte[] src=InetAddress.getByName(ipv6?"fd77::2":"198.18.0.3").getAddress();
-        byte[] dst=InetAddress.getByName(ipv6?"::1":"127.0.0.1").getAddress();
+        byte[] dst=InetAddress.getByName(ipv6?"2001:db8::7":"198.51.100.7").getAddress();
         if(ipv6){packet[0]=0x60;word(packet,4,8+payload.length);packet[6]=17;packet[7]=64;System.arraycopy(src,0,packet,8,16);System.arraycopy(dst,0,packet,24,16);}
         else{packet[0]=0x45;word(packet,2,packet.length);packet[8]=64;packet[9]=17;System.arraycopy(src,0,packet,12,4);System.arraycopy(dst,0,packet,16,4);word(packet,10,checksum(packet,0,20,0));}
         word(packet,h,32000);word(packet,h+2,port);word(packet,h+4,8+payload.length);System.arraycopy(payload,0,packet,h+8,payload.length);
@@ -34,8 +34,8 @@ public final class NativeTunnelTest extends InstrumentationTestCase {
             Os.setsockoptTimeval(right,OsConstants.SOL_SOCKET,OsConstants.SO_RCVTIMEO,StructTimeval.fromMillis(10000));
             ParcelFileDescriptor nativeFd=ParcelFileDescriptor.dup(left);
             LocalSocksGateway.Protector allow=new LocalSocksGateway.Protector(){public boolean protect(Socket s){return true;}public boolean protect(DatagramSocket s){return true;}};
-            try(LocalSocksGateway gateway=new LocalSocksGateway(allow,null,443,8888,()->false);
-                DatagramSocket echo=new DatagramSocket(new InetSocketAddress(ipv6?"::1":"127.0.0.1",0))){
+            try(LocalSocksGateway gateway=new LocalSocksGateway(allow,null,443,8888,()->false,host->InetAddress.getByName("127.0.0.1"));
+                DatagramSocket echo=new DatagramSocket(new InetSocketAddress("127.0.0.1",0))){
                 echo.setSoTimeout(10000);int port=gateway.start();
                 try(FileOutputStream out=new FileOutputStream(config)){out.write(TunnelConfig.create(port,gateway.username(),gateway.password()).getBytes(StandardCharsets.UTF_8));}
                 Future<?> response=threads.submit(()->{try{DatagramPacket p=new DatagramPacket(new byte[200],200);echo.receive(p);echo.send(p);}catch(IOException e){throw new RuntimeException(e);}});

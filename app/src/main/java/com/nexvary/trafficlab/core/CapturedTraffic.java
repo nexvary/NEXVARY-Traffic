@@ -3,7 +3,7 @@ import java.util.*;
 
 /** Bounded process-local handoff from real capture to the existing analysis pages. */
 public final class CapturedTraffic {
-    public record Exchange(String id,String original,String forwarded,String response,long elapsedMs,boolean prefixOnly) { }
+    public record Exchange(String id,String original,String forwarded,String response,long elapsedMs,boolean prefixOnly,long timestamp,String source) { }
     private static final Deque<Exchange> exchanges=new ArrayDeque<>();
     private static final int LIMIT=32768;
     private static long generation;
@@ -18,7 +18,13 @@ public final class CapturedTraffic {
     public static synchronized void completed(long session,String original,String forwarded,String response,long elapsedMs,boolean truncated){
         if(!accepting||session!=generation)return;
         boolean prefixOnly=truncated||original.length()>LIMIT||forwarded.length()>LIMIT||response.length()>LIMIT;
-        exchanges.addLast(new Exchange(UUID.randomUUID().toString(),prefix(original),prefix(forwarded),prefix(response),elapsedMs,prefixOnly));
+        exchanges.addLast(new Exchange(UUID.randomUUID().toString(),prefix(original),prefix(forwarded),prefix(response),elapsedMs,prefixOnly,System.currentTimeMillis(),"REAL_HTTPS"));
+        while(exchanges.size()>32)exchanges.removeFirst();
+    }
+    public static synchronized long archiveSession(){if(!accepting){accepting=true;generation++;}return generation;}
+    public static synchronized void imported(long session,String original,String forwarded,String response,long elapsedMs,long timestamp,String source){
+        if(!accepting||session!=generation)return;
+        exchanges.addLast(new Exchange(UUID.randomUUID().toString(),prefix(original),prefix(forwarded),prefix(response),Math.max(0,elapsedMs),true,Math.max(0,timestamp),source.equals("RESTORED_CAPTURE")?source:"HAR_IMPORT"));
         while(exchanges.size()>32)exchanges.removeFirst();
     }
     public static synchronized List<Exchange> all(){return new ArrayList<>(exchanges);}

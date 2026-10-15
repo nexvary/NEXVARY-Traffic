@@ -20,14 +20,18 @@ public class EmbeddedHttpsTest extends InstrumentationTestCase {
     }
     private String header(InputStream in) throws Exception {ByteArrayOutputStream out=new ByteArrayOutputStream();int state=0;while(out.size()<32768){int b=in.read();if(b<0)throw new EOFException();out.write(b);state=(state<<8)|b;if(state==0x0d0a0d0a)return out.toString("ISO-8859-1");}throw new IOException("headers");}
     private String all(InputStream in) throws Exception {ByteArrayOutputStream out=new ByteArrayOutputStream();byte[] b=new byte[2048];int n;while((n=in.read(b))!=-1)out.write(b,0,n);return out.toString("UTF-8");}
-    private String client(int proxyPort,int targetPort,String body) throws Exception {
+    private String client(int proxyPort,int targetPort,String body) throws Exception {return client(proxyPort,targetPort,body,false);}
+    private String client(int proxyPort,int targetPort,String body,boolean chunked) throws Exception {
         try(Socket tcp=new Socket("127.0.0.1",proxyPort)){
             tcp.setSoTimeout(10000);tcp.getOutputStream().write(("CONNECT 127.0.0.1:"+targetPort+" HTTP/1.1\r\nHost: lab\r\n\r\n").getBytes(StandardCharsets.US_ASCII));tcp.getOutputStream().flush();
             assertTrue(header(tcp.getInputStream()).startsWith("HTTP/1.1 200"));
             try(SSLSocket ssl=(SSLSocket)trusted.getSocketFactory().createSocket(tcp,"127.0.0.1",targetPort,false)){
                 SSLParameters p=ssl.getSSLParameters();p.setEndpointIdentificationAlgorithm("HTTPS");ssl.setSSLParameters(p);ssl.setSoTimeout(10000);ssl.startHandshake();
                 byte[] payload=body.getBytes(StandardCharsets.UTF_8);
-                ssl.getOutputStream().write(("POST /lesson HTTP/1.1\r\nHost: 127.0.0.1\r\nContent-Length: "+payload.length+"\r\n\r\n").getBytes(StandardCharsets.US_ASCII));ssl.getOutputStream().write(payload);ssl.getOutputStream().flush();return all(ssl.getInputStream());
+                ssl.getOutputStream().write(("POST /lesson HTTP/1.1\r\nHost: 127.0.0.1\r\n"+(chunked?"Transfer-Encoding: chunked":"Content-Length: "+payload.length)+"\r\n\r\n").getBytes(StandardCharsets.US_ASCII));
+                if(chunked)ssl.getOutputStream().write((Integer.toHexString(payload.length)+"\r\n").getBytes(StandardCharsets.US_ASCII));
+                ssl.getOutputStream().write(payload);if(chunked)ssl.getOutputStream().write("\r\n0\r\n\r\n".getBytes(StandardCharsets.US_ASCII));
+                ssl.getOutputStream().flush();return all(ssl.getInputStream());
             }
         }
     }
@@ -46,7 +50,7 @@ public class EmbeddedHttpsTest extends InstrumentationTestCase {
                 byte[] response=("accepted:"+observed).getBytes(StandardCharsets.UTF_8);socket.getOutputStream().write(("HTTP/1.1 200 OK\r\nContent-Length: "+response.length+"\r\nConnection: close\r\n\r\n").getBytes(StandardCharsets.US_ASCII));socket.getOutputStream().write(response);socket.getOutputStream().flush();return observed;
             }});
             try(EmbeddedTlsProxy proxy=new EmbeddedTlsProxy(ca,"127.0.0.1",targetPort,true,trusted)){
-                int port=proxy.start(0);Future<String> client=threads.submit(()->client(port,targetPort,"{\"price\":100}"));
+                int port=proxy.start(0);Future<String> client=threads.submit(()->client(port,targetPort,"{\"price\":100}",true));
                 EmbeddedTlsProxy.Flow flow=paused(proxy);assertTrue(flow.request.contains("price\":100"));
                 proxy.decide(flow.id,flow.request.replace("price\":100","price\":1"),false);
                 String reply=client.get(15,TimeUnit.SECONDS);assertTrue(reply,reply.contains("accepted:{\"price\":1}"));assertEquals("{\"price\":1}",upstream.get(10,TimeUnit.SECONDS));

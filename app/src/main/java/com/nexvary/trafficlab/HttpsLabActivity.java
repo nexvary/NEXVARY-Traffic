@@ -55,6 +55,7 @@ public final class HttpsLabActivity extends Activity {
             try{startActivity(new Intent(this,VpnLabActivity.class).putExtra("host",host.getText().toString().trim()).putExtra("port",Integer.parseInt(port.getText().toString())));}
             catch(Exception error){state.setText(error.getMessage());}
         });
+        button(page,tr("أرشيف الجلسات وتصدير HAR","Session archive and HAR export"),"tls:archive",()->startActivity(new Intent(this,SessionArchiveActivity.class)));
         selector=new Spinner(this);page.addView(selector);selector.setOnItemSelectedListener(new AdapterView.OnItemSelectedListener(){
             public void onNothingSelected(AdapterView<?> parent){}
             public void onItemSelected(AdapterView<?> parent,View view,int position,long id){if(position<visible.size()){selected=visible.get(position).id;showSelected();}}
