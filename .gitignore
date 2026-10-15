@@ -9,3 +9,6 @@ testbuild/out/
 *.jks
 *.keystore
 
+
+app/libs/*.aar
+app/src/main/assets/native-licenses/

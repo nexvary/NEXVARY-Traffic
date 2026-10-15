@@ -51,6 +51,10 @@ public final class HttpsLabActivity extends Activity {
             }catch(Exception error){state.setText(error.getMessage());}
         });
         button(page,tr("إيقاف المحرك","Stop engine"),"tls:stop",()->{stopService(new Intent(this,EmbeddedProxyService.class));refresh();});
+        button(page,tr("توجيه تطبيقات التدريب عبر VPN","Route training apps through VPN"),"tls:vpn",()->{
+            try{startActivity(new Intent(this,VpnLabActivity.class).putExtra("host",host.getText().toString().trim()).putExtra("port",Integer.parseInt(port.getText().toString())));}
+            catch(Exception error){state.setText(error.getMessage());}
+        });
         selector=new Spinner(this);page.addView(selector);selector.setOnItemSelectedListener(new AdapterView.OnItemSelectedListener(){
             public void onNothingSelected(AdapterView<?> parent){}
             public void onItemSelected(AdapterView<?> parent,View view,int position,long id){if(position<visible.size()){selected=visible.get(position).id;showSelected();}}

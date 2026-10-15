@@ -12,10 +12,10 @@ android {
     defaultConfig {
         applicationId 'com.nexvary.trafficlab'
         testInstrumentationRunner 'androidx.test.runner.AndroidJUnitRunner'
-        minSdk 26
+        minSdk 29
         targetSdk 35
-        versionCode 104
-        versionName '10.1.0-integrated-lab'
+        versionCode 105
+        versionName '10.2.0-vpn-lab'
         buildConfigField 'String', 'RECOVERY_ENDPOINT', '"' + (project.findProperty('nexvaryRecoveryEndpoint') ?: '') + '"'
     }
 
@@ -43,6 +43,7 @@ android {
 
 // Local certificate generation; no external capture application.
 dependencies {
+    implementation files("libs/hev-socks5-tunnel-2.19.0.aar")
     implementation "org.bouncycastle:bcpkix-jdk18on:1.86"
     androidTestImplementation "androidx.test:runner:1.7.0"
 }

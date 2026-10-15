@@ -1,75 +1,70 @@
 package com.nexvary.trafficlab.vpn;
-
-import android.app.Notification;
-import android.app.NotificationChannel;
-import android.app.NotificationManager;
+import android.app.*;
 import android.content.Intent;
 import android.net.VpnService;
-import android.os.Build;
-import android.os.ParcelFileDescriptor;
-import com.nexvary.trafficlab.R;
-import com.nexvary.trafficlab.packet.*;
+import android.os.*;
+import com.nexvary.trafficlab.*;
+import com.nexvary.trafficlab.tls.EmbeddedProxyService;
+import hev.htproxy.TProxyService;
 import java.io.*;
-import java.util.Arrays;
+import java.nio.charset.StandardCharsets;
+import java.util.*;
 
-/** Closed lab-tunnel capture service; route scope is limited to 10.77.0.0/24. */
-public class LabVpnService extends VpnService {
+/** User-selected application routing. All forwarding sockets bypass this tunnel. */
+public final class LabVpnService extends VpnService {
     public static final String ACTION_PACKET="com.nexvary.trafficlab.PACKET";
-    private static final String CHANNEL="nexvary_lab_capture";
-    private static final int NOTIFICATION_ID=7701;
+    public static volatile String state="STOPPED";
     private ParcelFileDescriptor tun;
-    private volatile boolean running;
-    private PcapWriter pcap;
-    private Thread reader;
-
-    @Override public void onCreate() {
-        super.onCreate();
-        NotificationManager nm=getSystemService(NotificationManager.class);
-        if(Build.VERSION.SDK_INT>=26) nm.createNotificationChannel(new NotificationChannel(CHANNEL,"NEXVARY Lab Capture",NotificationManager.IMPORTANCE_LOW));
-    }
-
-    @Override public int onStartCommand(Intent intent, int flags, int startId) {
-        startForeground(NOTIFICATION_ID, notification());
-        if (tun == null) {
-            tun = new Builder().setSession("NEXVARY Lab Capture").addAddress("10.77.0.2",24).addRoute("10.77.0.0",24).establish();
-            running = tun != null;
-            if (running) {
-                try { pcap=new PcapWriter(new BufferedOutputStream(new FileOutputStream(new File(getFilesDir(),"lab-tunnel.pcap")))); } catch(Exception ignored){}
-                reader=new Thread(this::readLoop, "nexvary-lab-tun"); reader.setDaemon(true); reader.start();
+    private LocalSocksGateway gateway;
+    private final Handler handler=new Handler(Looper.getMainLooper());
+    private boolean active;
+    private final Runnable monitor=new Runnable(){public void run(){
+        if(!active)return;
+        if(!TProxyService.TProxyIsRunning()){state="ERROR: forwarding engine stopped";stopSelf();return;}
+        handler.postDelayed(this,1000);
+    }};
+    @Override public int onStartCommand(Intent intent,int flags,int id){
+        if(intent==null||"stop".equals(intent.getAction())||!AuthSession.isUnlocked()){stopSelf();return START_NOT_STICKY;}
+        if(active)return START_NOT_STICKY;
+        NotificationManager manager=getSystemService(NotificationManager.class);
+        manager.createNotificationChannel(new NotificationChannel("nexvary_lab_capture","NEXVARY VPN Lab",NotificationManager.IMPORTANCE_LOW));
+        PendingIntent stop=PendingIntent.getService(this,70,new Intent(this,LabVpnService.class).setAction("stop"),PendingIntent.FLAG_IMMUTABLE|PendingIntent.FLAG_UPDATE_CURRENT);
+        PendingIntent open=PendingIntent.getActivity(this,71,new Intent(this,VpnLabActivity.class),PendingIntent.FLAG_IMMUTABLE|PendingIntent.FLAG_UPDATE_CURRENT);
+        startForeground(7701,new Notification.Builder(this,"nexvary_lab_capture").setSmallIcon(R.drawable.ic_shield).setContentTitle("NEXVARY VPN Lab")
+                .setContentText("Selected training applications · TCP / UDP").setContentIntent(open).setOngoing(true).addAction(new Notification.Action.Builder(null,"Stop",stop).build()).build());
+        state="STARTING";
+        try{
+            String[] packages=intent.getStringArrayExtra("packages");
+            if(packages==null||packages.length==0)throw new IllegalArgumentException("Select at least one training application");
+            Builder builder=new Builder().setSession("NEXVARY Traffic Lab").setMtu(1500)
+                    .addAddress("198.18.0.1",32).addAddress("fd77::1",128)
+                    .addRoute("0.0.0.0",0).addRoute("::",0).addDnsServer("198.18.0.2");
+            Set<String> unique=new HashSet<>(Arrays.asList(packages));
+            for(String name:unique){
+                if(name==null||name.equals(getPackageName())||!name.matches("[A-Za-z0-9_]+(\\.[A-Za-z0-9_]+)+"))throw new IllegalArgumentException("Invalid training package");
+                builder.addAllowedApplication(name);
             }
-        }
+            gateway=new LocalSocksGateway(new LocalSocksGateway.Protector(){
+                public boolean protect(java.net.Socket s){return LabVpnService.this.protect(s);}
+                public boolean protect(java.net.DatagramSocket s){return LabVpnService.this.protect(s);}
+            },intent.getStringExtra("host"),intent.getIntExtra("port",443),8888,()->EmbeddedProxyService.engine!=null&&EmbeddedProxyService.engine.isRunning());
+            int port=gateway.start();
+            File config=new File(getFilesDir(),"vpn-tunnel.yml");
+            try(FileOutputStream out=new FileOutputStream(config)){out.write(TunnelConfig.create(port,gateway.username(),gateway.password()).getBytes(StandardCharsets.UTF_8));}
+            tun=builder.establish();if(tun==null)throw new IOException("Android VPN permission is required");
+            if(!TProxyService.TProxyStartService(config.getAbsolutePath(),tun.getFd()))throw new IOException("Forwarding engine failed to start");
+            active=true;state="RUNNING";handler.postDelayed(monitor,1000);
+        }catch(Exception|LinkageError error){state="ERROR: "+error.getMessage();stopSelf();}
         return START_NOT_STICKY;
     }
-
-    private Notification notification(){
-        Notification.Builder b=Build.VERSION.SDK_INT>=26?new Notification.Builder(this,CHANNEL):new Notification.Builder(this);
-        return b.setContentTitle(getString(R.string.app_name)).setContentText("Authorized closed lab capture is active").setSmallIcon(android.R.drawable.stat_sys_download_done).setOngoing(true).build();
-    }
-
-    private void readLoop() {
-        if (tun == null) return;
-        try (FileInputStream in = new FileInputStream(tun.getFileDescriptor())) {
-            byte[] buffer = new byte[65535]; int n;
-            while (running && (n=in.read(buffer)) >= 0) {
-                if(n==0) continue;
-                byte[] packet=Arrays.copyOf(buffer,n);
-                try { if(pcap!=null) pcap.write(packet,System.currentTimeMillis()); } catch(Exception ignored){}
-                try {
-                    PacketInfo info=PacketParser.parse(packet);
-                    Intent e=new Intent(ACTION_PACKET); e.setPackage(getPackageName());
-                    e.putExtra("summary",info.protocol()+" "+info.src()+":"+info.srcPort()+" → "+info.dst()+":"+info.dstPort()+" ("+info.length()+"B)");
-                    sendBroadcast(e);
-                } catch(Exception ignored) { /* malformed packets must not stop capture */ }
-            }
-        } catch (Exception ignored) { }
-    }
-
-    @Override public void onDestroy() {
-        running=false;
-        if(reader!=null) reader.interrupt();
-        try { if (pcap!=null) pcap.close(); } catch(Exception ignored){} pcap=null;
-        try { if (tun!=null) tun.close(); } catch(Exception ignored) {} tun=null;
-        stopForeground(true);
-        super.onDestroy();
+    public static long[] stats(){try{return TProxyService.TProxyGetStats();}catch(LinkageError error){return new long[4];}}
+    @Override public void onRevoke(){stopSelf();super.onRevoke();}
+    @Override public void onDestroy(){
+        handler.removeCallbacks(monitor);active=false;
+        try{TProxyService.TProxyStopService();}catch(LinkageError ignored){}
+        if(gateway!=null)gateway.close();gateway=null;
+        try{if(tun!=null)tun.close();}catch(IOException ignored){}tun=null;
+        new File(getFilesDir(),"vpn-tunnel.yml").delete();
+        if(!state.startsWith("ERROR"))state="STOPPED";stopForeground(true);super.onDestroy();
     }
 }

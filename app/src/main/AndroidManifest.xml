@@ -3,6 +3,7 @@
     <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_SPECIAL_USE" />
+    <queries><intent><action android:name="android.intent.action.MAIN" /><category android:name="android.intent.category.LAUNCHER" /></intent></queries>
     <application
         android:enableOnBackInvokedCallback="true"
         android:allowBackup="false"
@@ -12,6 +13,7 @@
         android:theme="@style/AppTheme"
         android:supportsRtl="true"
         android:usesCleartextTraffic="false">
+        <activity android:name=".VpnLabActivity" android:exported="false" />
         <activity android:name=".HttpsLabActivity" android:exported="false" />
         <activity
             android:name=".MainActivity"

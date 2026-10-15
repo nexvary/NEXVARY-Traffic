@@ -24,6 +24,8 @@ jobs:
       - uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: '8.9'
+      - name: Prepare pinned native VPN engine
+        run: bash ci/prepare-native.sh
       - name: Android build and lint
         run: gradle --no-daemon assembleDebug lintDebug
       - uses: actions/upload-artifact@v4
@@ -50,6 +52,8 @@ jobs:
       - uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: '8.9'
+      - name: Prepare pinned native VPN engine
+        run: bash ci/prepare-native.sh
       - name: Enable emulator acceleration
         run: sudo chmod 666 /dev/kvm
       - name: Navigation, exit and real TLS integration tests
