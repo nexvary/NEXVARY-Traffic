@@ -26,28 +26,38 @@ public class NavigationExitTest extends InstrumentationTestCase {
     private Object field(String name) throws Exception {Field f=MainActivity.class.getDeclaredField(name);f.setAccessible(true);return f.get(activity);}
     private String route() throws Exception {return (String)field("currentScreen");}
     private View find(View root,String tag){if(tag.equals(root.getTag()))return root;if(root instanceof ViewGroup){ViewGroup g=(ViewGroup)root;for(int i=0;i<g.getChildCount();i++){View v=find(g.getChildAt(i),tag);if(v!=null)return v;}}return null;}
-    private void click(String tag){
-        getInstrumentation().runOnMainSync(()->{View view=find(activity.getWindow().getDecorView(),tag);assertNotNull("Missing button "+tag,view);view.requestRectangleOnScreen(new Rect(0,0,view.getWidth(),view.getHeight()),true);
-            for(ViewParent parent=view.getParent();parent instanceof ViewGroup;parent=parent.getParent()){
-                ViewGroup group=(ViewGroup)parent;
-                if(group instanceof android.widget.HorizontalScrollView || group instanceof android.widget.ScrollView){
-                    Rect local=new Rect(0,0,view.getWidth(),view.getHeight());group.offsetDescendantRectToMyCoords(view,local);
-                    if(group instanceof android.widget.HorizontalScrollView)group.scrollTo(Math.max(0,local.centerX()-group.getWidth()/2),0);
-                    else group.scrollTo(0,Math.max(0,local.centerY()-group.getHeight()/2));
-                }
-            }});
-        getInstrumentation().waitForIdleSync();final Rect bounds=new Rect();
-        getInstrumentation().runOnMainSync(()->{View view=find(activity.getWindow().getDecorView(),tag);assertTrue("Button not visible "+tag,view.getGlobalVisibleRect(bounds));});
+    private void touch(Rect bounds){
         long now=SystemClock.uptimeMillis();
         MotionEvent down=MotionEvent.obtain(now,now,MotionEvent.ACTION_DOWN,bounds.centerX(),bounds.centerY(),0);
         MotionEvent up=MotionEvent.obtain(now,now+50,MotionEvent.ACTION_UP,bounds.centerX(),bounds.centerY(),0);
         try{getInstrumentation().sendPointerSync(down);getInstrumentation().sendPointerSync(up);}finally{down.recycle();up.recycle();}
         getInstrumentation().waitForIdleSync();
     }
+    private void click(String tag){
+        final View[] found=new View[1];getInstrumentation().runOnMainSync(()->found[0]=find(activity.getWindow().getDecorView(),tag));
+        if(found[0]==null && tag.startsWith("nav:")){
+            click("app:tools");
+            try{
+                AlertDialog menu=(AlertDialog)field("toolsDialog");android.widget.ListView list=menu.getListView();
+                String label=UiI18n.t(activity,tag.substring(4));int index=-1;
+                for(int i=0;i<list.getAdapter().getCount();i++)if(label.equals(list.getAdapter().getItem(i)))index=i;
+                assertTrue("Missing menu route "+tag,index>=0);final int position=index;
+                getInstrumentation().runOnMainSync(()->list.setSelectionFromTop(position,0));getInstrumentation().waitForIdleSync();
+                final Rect bounds=new Rect();getInstrumentation().runOnMainSync(()->{
+                    View item=list.getChildAt(position-list.getFirstVisiblePosition());assertNotNull("Menu item absent "+tag,item);
+                    assertTrue("Menu item not visible "+tag,item.getGlobalVisibleRect(bounds));
+                });touch(bounds);return;
+            }catch(Exception error){throw new AssertionError(error);}
+        }
+        getInstrumentation().runOnMainSync(()->{View view=found[0];assertNotNull("Missing button "+tag,view);view.requestRectangleOnScreen(new Rect(0,0,view.getWidth(),view.getHeight()),true);});
+        getInstrumentation().waitForIdleSync();final Rect bounds=new Rect();
+        getInstrumentation().runOnMainSync(()->assertTrue("Button not visible "+tag,found[0].getGlobalVisibleRect(bounds)));touch(bounds);
+    }
     private void collect(View root,Set<String> tags){Object tag=root.getTag();if(tag instanceof String && ((String)tag).startsWith("nav:") && !tag.equals("nav:back"))tags.add((String)tag);if(root instanceof ViewGroup){ViewGroup g=(ViewGroup)root;for(int i=0;i<g.getChildCount();i++)collect(g.getChildAt(i),tags);}}
     public void testEveryNavigationButtonAndBack() throws Exception {
-        Set<String> tags=new LinkedHashSet<>();getInstrumentation().runOnMainSync(()->collect(activity.getWindow().getDecorView(),tags));
-        assertTrue("Expected advanced page coverage",tags.size()>30);
+        Set<String> tags=new LinkedHashSet<>();
+        String[] routes={"API Graph","About","AutoDetect","Baseline","Cases","Cockpit","Composer","Contract","Dashboard","Data Journey","Dependencies","Diff","Evidence","Explain","Flow Studio","H2/gRPC","HTTPS Lab","History","Intercept","JWT/OAuth","Lecture","Matrix","Packet Lab","Packet Map","Presenter","Radar","Regression","Remediation","Repeater","Replay","Report","Story","TLS","TLS Posture","Timeline","Waterfall","WebSocket","What-If"};
+        for(String route:routes)tags.add("nav:"+route);
         for(String tag:tags){
             if(tag.equals("nav:HTTPS Lab"))continue;
             click(tag);assertEquals(tag.substring(4),route());

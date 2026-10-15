@@ -30,7 +30,7 @@ public class MainActivity extends Activity {
     private LabResponse lastResponse;
     private LinearLayout content;
     private TextView status;
-    private AlertDialog exitDialog;
+    private AlertDialog exitDialog, toolsDialog;
     private final Deque<String> navStack = new ArrayDeque<>();
     private final Map<String,Runnable> screens = new LinkedHashMap<>();
     private String currentScreen = "Dashboard";
@@ -60,9 +60,11 @@ public class MainActivity extends Activity {
         status = statusPill("● "+getString(R.string.authorized_mode)+"  •  127.0.0.1:"+PORT); root.addView(status,new LinearLayout.LayoutParams(-1,dp(34)));
 
         // Secondary tool ribbon: keeps advanced modules discoverable without crowding the main screen.
-        HorizontalScrollView hs = new HorizontalScrollView(this); hs.setHorizontalScrollBarEnabled(false); hs.setFillViewport(false); LinearLayout nav=new LinearLayout(this); nav.setOrientation(LinearLayout.HORIZONTAL); nav.setPadding(0,dp(6),0,dp(7));
+        LinearLayout nav=new LinearLayout(this);
         addNav(nav,"HTTPS Lab",()->startActivity(new Intent(this,HttpsLabActivity.class))); addNav(nav,"Story",this::showStory); addNav(nav,"Repeater",this::showRepeater); addNav(nav,"Diff",this::showDiff); addNav(nav,"Packet Lab",this::showPacketLab); addNav(nav,"WebSocket",this::showWebSocket); addNav(nav,"TLS",this::showTls); addNav(nav,"Evidence",this::showEvidence); addNav(nav,"Presenter",this::showPresenter); addNav(nav,"Explain",this::showExplain); addNav(nav,"What-If",this::showWhatIf); addNav(nav,"Flow Studio",this::showFlow); addNav(nav,"API Graph",this::showApiGraph); addNav(nav,"Timeline",this::showTimeline); addNav(nav,"Matrix",this::showMatrix); addNav(nav,"Replay",this::showReplay); addNav(nav,"Report",this::showReport); addNav(nav,"Lecture",this::showLecture); addNav(nav,"Packet Map",this::showPacketMap); addNav(nav,"Radar",this::showRadar); addNav(nav,"H2/gRPC",this::showModernProtocols); addNav(nav,"JWT/OAuth",this::showIdentityLab); addNav(nav,"Contract",this::showContract); addNav(nav,"Cases",this::showCases); addNav(nav,"AutoDetect",this::showAutoDetect); addNav(nav,"Waterfall",this::showWaterfall); addNav(nav,"Dependencies",this::showDependencies); addNav(nav,"Regression",this::showRegression); addNav(nav,"Baseline",this::showBaseline); addNav(nav,"Data Journey",this::showDataJourney); addNav(nav,"TLS Posture",this::showTlsPosture); addNav(nav,"Composer",this::showComposer); addNav(nav,"Remediation",this::showRemediation); addNav(nav,"Cockpit",this::showCockpit);
-        hs.addView(nav,new HorizontalScrollView.LayoutParams(-2,-2)); root.addView(hs,new LinearLayout.LayoutParams(-1,-2));
+        Button tools=outlineIconButton(isRtl()?"أدوات المختبر والصفحات":"Lab tools and pages",cyan,R.drawable.ic_dashboard);
+        tools.setTag("app:tools"); tools.setOnClickListener(v->showToolsMenu());
+        root.addView(tools,new LinearLayout.LayoutParams(-1,dp(48)));
 
         ScrollView sv = new ScrollView(this); sv.setFillViewport(true); sv.setClipToPadding(false); content = new LinearLayout(this); content.setOrientation(LinearLayout.VERTICAL); content.setPadding(0,dp(2),0,dp(18)); sv.addView(content,new ScrollView.LayoutParams(-1,-2)); root.addView(sv,new LinearLayout.LayoutParams(-1,0,1));
 
@@ -76,7 +78,14 @@ public class MainActivity extends Activity {
         setContentView(root);
         screens.put("Dashboard",this::showDashboard); screens.put("Intercept",this::showIntercept); screens.put("History",this::showHistory); screens.put("About",this::showAbout);
     }
-    private void addNav(LinearLayout nav,String name,Runnable r){ screens.put(name,r); int icon=navIcon(name); Button b=outlineIconButton(UiI18n.t(this,name),navColor(name),icon); b.setTag("nav:"+name); b.setOnClickListener(v->navigate(name,r)); LinearLayout.LayoutParams lp=new LinearLayout.LayoutParams(-2,dp(46)); lp.setMargins(dp(3),0,dp(3),0); nav.addView(b,lp); }
+    private void addNav(LinearLayout nav,String name,Runnable r){ screens.put(name,r); }
+    private void showToolsMenu(){
+        String[] routes=screens.keySet().toArray(new String[0]);
+        String[] labels=new String[routes.length];for(int i=0;i<routes.length;i++)labels[i]=UiI18n.t(this,routes[i]);
+        toolsDialog=new AlertDialog.Builder(this).setTitle(isRtl()?"أدوات المختبر":"Lab tools")
+                .setItems(labels,(dialog,index)->navigate(routes[index],screens.get(routes[index])))
+                .setNegativeButton(getString(R.string.cancel),null).show();
+    }
     private void addBottomNav(LinearLayout nav,String name,int icon,int color,Runnable r){ screens.put(name,r); LinearLayout box=new LinearLayout(this); box.setOrientation(LinearLayout.VERTICAL); box.setGravity(Gravity.CENTER); box.setPadding(dp(2),dp(4),dp(2),dp(2)); android.widget.ImageView iv=new android.widget.ImageView(this); iv.setImageResource(icon); iv.setColorFilter(color); box.addView(iv,new LinearLayout.LayoutParams(dp(24),dp(24))); TextView label=text(UiI18n.t(this,name),10,name.equals("About")?cyan:silver); label.setTextIsSelectable(false); label.setGravity(Gravity.CENTER); label.setSingleLine(true); label.setPadding(0,dp(2),0,0); box.addView(label,new LinearLayout.LayoutParams(-1,-2)); box.setTag("nav:"+name); box.setContentDescription(UiI18n.t(this,name)); box.setOnClickListener(v->navigate(name,r)); box.setClickable(true); box.setFocusable(true); LinearLayout.LayoutParams lp=new LinearLayout.LayoutParams(0,-1,1); lp.setMargins(dp(2),0,dp(2),0); nav.addView(box,lp); }
     private void navigate(String name,Runnable r){
         if ("HTTPS Lab".equals(name)) { r.run(); return; }
