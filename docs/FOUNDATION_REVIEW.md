@@ -17,7 +17,8 @@ Added CI for the JVM suite, Android debug assembly, lint and artifact collection
 - UTF-8 regression fixture: independently checked, 15 bytes.
 - JVM suite: NOT RUN; Java runtime exists but `javac` is unavailable.
 - Android assembly, lint and emulator/device tests: NOT RUN locally; SDK and Gradle are unavailable.
-- GitHub Actions: consult the workflow run for this commit; local inspection cannot establish its result.
+- GitHub Actions JVM suite: PASS on run 38742432375, including the new regression test.
+- Initial Android setup failed because the action default requested the retired `tools` package; CI now requests explicit platform/build-tools packages. Android build result remains pending.
 
 ## Priorities after CI
 
