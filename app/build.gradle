@@ -5,13 +5,17 @@ plugins {
 android {
     namespace 'com.nexvary.trafficlab'
     compileSdk 35
+    useLibrary 'android.test.runner'
+    useLibrary 'android.test.base'
+    useLibrary 'android.test.mock'
 
     defaultConfig {
         applicationId 'com.nexvary.trafficlab'
+        testInstrumentationRunner 'android.test.InstrumentationTestRunner'
         minSdk 26
         targetSdk 35
-        versionCode 103
-        versionName '10.0.3-build-fix-lab'
+        versionCode 104
+        versionName '10.1.0-integrated-lab'
         buildConfigField 'String', 'RECOVERY_ENDPOINT', '"' + (project.findProperty('nexvaryRecoveryEndpoint') ?: '') + '"'
     }
 
@@ -29,4 +33,9 @@ android {
         sourceCompatibility JavaVersion.VERSION_17
         targetCompatibility JavaVersion.VERSION_17
     }
+}
+
+// Local certificate generation; no external capture application.
+dependencies {
+    implementation "org.bouncycastle:bcpkix-jdk18on:1.86"
 }

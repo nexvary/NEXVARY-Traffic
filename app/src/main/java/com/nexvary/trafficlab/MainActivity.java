@@ -30,6 +30,7 @@ public class MainActivity extends Activity {
     private LabResponse lastResponse;
     private LinearLayout content;
     private TextView status;
+    private AlertDialog exitDialog;
     private final Deque<String> navStack = new ArrayDeque<>();
     private final Map<String,Runnable> screens = new LinkedHashMap<>();
     private String currentScreen = "Dashboard";
@@ -47,7 +48,7 @@ public class MainActivity extends Activity {
         if(Build.VERSION.SDK_INT>=30) root.setOnApplyWindowInsetsListener((v,i)->{ android.graphics.Insets x=i.getInsets(WindowInsets.Type.systemBars()); v.setPadding(dp(10)+x.left,dp(8)+x.top,dp(10)+x.right,dp(8)+x.bottom); return i; });
 
         LinearLayout top=new LinearLayout(this); top.setOrientation(LinearLayout.HORIZONTAL); top.setGravity(Gravity.CENTER_VERTICAL); top.setPadding(dp(2),dp(2),dp(2),dp(6));
-        Button back=outlineIconButton("",gold,R.drawable.ic_back); back.setContentDescription(getString(R.string.back)); back.setOnClickListener(v->goBack()); top.addView(back,new LinearLayout.LayoutParams(dp(48),dp(44)));
+        Button back=outlineIconButton("",gold,R.drawable.ic_back); back.setTag("nav:back"); back.setContentDescription(getString(R.string.back)); back.setOnClickListener(v->goBack()); top.addView(back,new LinearLayout.LayoutParams(dp(48),dp(44)));
         LinearLayout brand=new LinearLayout(this); brand.setOrientation(LinearLayout.VERTICAL); brand.setGravity(Gravity.CENTER);
         TextView title=text("NEXVARY",23,silver); title.setTypeface(Typeface.create("sans-serif-light",Typeface.BOLD)); title.setGravity(Gravity.CENTER); title.setLetterSpacing(.18f); title.setPadding(0,0,0,0); brand.addView(title,new LinearLayout.LayoutParams(-1,-2));
         TextView sub=text("TRAFFIC LAB",10,cyan); sub.setTypeface(Typeface.DEFAULT_BOLD); sub.setGravity(Gravity.CENTER); sub.setLetterSpacing(.24f); sub.setPadding(0,0,0,0); brand.addView(sub,new LinearLayout.LayoutParams(-1,-2));
@@ -75,9 +76,13 @@ public class MainActivity extends Activity {
         setContentView(root);
         screens.put("Dashboard",this::showDashboard); screens.put("Intercept",this::showIntercept); screens.put("History",this::showHistory); screens.put("About",this::showAbout);
     }
-    private void addNav(LinearLayout nav,String name,Runnable r){ screens.put(name,r); int icon=navIcon(name); Button b=outlineIconButton(UiI18n.t(this,name),navColor(name),icon); b.setOnClickListener(v->navigate(name,r)); LinearLayout.LayoutParams lp=new LinearLayout.LayoutParams(-2,dp(46)); lp.setMargins(dp(3),0,dp(3),0); nav.addView(b,lp); }
-    private void addBottomNav(LinearLayout nav,String name,int icon,int color,Runnable r){ screens.put(name,r); LinearLayout box=new LinearLayout(this); box.setOrientation(LinearLayout.VERTICAL); box.setGravity(Gravity.CENTER); box.setPadding(dp(2),dp(4),dp(2),dp(2)); android.widget.ImageView iv=new android.widget.ImageView(this); iv.setImageResource(icon); iv.setColorFilter(color); box.addView(iv,new LinearLayout.LayoutParams(dp(24),dp(24))); TextView label=text(UiI18n.t(this,name),10,name.equals("About")?cyan:silver); label.setGravity(Gravity.CENTER); label.setSingleLine(true); label.setPadding(0,dp(2),0,0); box.addView(label,new LinearLayout.LayoutParams(-1,-2)); box.setOnClickListener(v->navigate(name,r)); box.setClickable(true); box.setFocusable(true); LinearLayout.LayoutParams lp=new LinearLayout.LayoutParams(0,-1,1); lp.setMargins(dp(2),0,dp(2),0); nav.addView(box,lp); }
-    private void navigate(String name,Runnable r){ if(!name.equals(currentScreen)){ navStack.push(currentScreen); currentScreen=name; } r.run(); }
+    private void addNav(LinearLayout nav,String name,Runnable r){ screens.put(name,r); int icon=navIcon(name); Button b=outlineIconButton(UiI18n.t(this,name),navColor(name),icon); b.setTag("nav:"+name); b.setOnClickListener(v->navigate(name,r)); LinearLayout.LayoutParams lp=new LinearLayout.LayoutParams(-2,dp(46)); lp.setMargins(dp(3),0,dp(3),0); nav.addView(b,lp); }
+    private void addBottomNav(LinearLayout nav,String name,int icon,int color,Runnable r){ screens.put(name,r); LinearLayout box=new LinearLayout(this); box.setOrientation(LinearLayout.VERTICAL); box.setGravity(Gravity.CENTER); box.setPadding(dp(2),dp(4),dp(2),dp(2)); android.widget.ImageView iv=new android.widget.ImageView(this); iv.setImageResource(icon); iv.setColorFilter(color); box.addView(iv,new LinearLayout.LayoutParams(dp(24),dp(24))); TextView label=text(UiI18n.t(this,name),10,name.equals("About")?cyan:silver); label.setGravity(Gravity.CENTER); label.setSingleLine(true); label.setPadding(0,dp(2),0,0); box.addView(label,new LinearLayout.LayoutParams(-1,-2)); box.setTag("nav:"+name); box.setContentDescription(UiI18n.t(this,name)); box.setOnClickListener(v->navigate(name,r)); box.setClickable(true); box.setFocusable(true); LinearLayout.LayoutParams lp=new LinearLayout.LayoutParams(0,-1,1); lp.setMargins(dp(2),0,dp(2),0); nav.addView(box,lp); }
+    private void navigate(String name,Runnable r){
+        if ("HTTPS Lab".equals(name)) { r.run(); return; }
+        if(!name.equals(currentScreen)){ navStack.push(currentScreen); currentScreen=name; }
+        r.run();
+    }
     private void goBack(){ if(navStack.isEmpty()){ Toast.makeText(this,getString(R.string.already_home),Toast.LENGTH_SHORT).show(); if(!"Dashboard".equals(currentScreen)){currentScreen="Dashboard";showDashboard();} return;} String prev=navStack.pop(); currentScreen=prev; Runnable r=screens.get(prev); if(r!=null)r.run(); else showDashboard(); }
     @Override public void onBackPressed(){ goBack(); }
     private void lockApp(){ AuthSession.revoke(); Intent i=new Intent(this,LoginActivity.class); i.addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP|Intent.FLAG_ACTIVITY_NEW_TASK); startActivity(i); finish(); }
@@ -136,7 +141,7 @@ public class MainActivity extends Activity {
     }
 
     private LinearLayout metric(String label,String value,int color){ LinearLayout b=new LinearLayout(this); b.setOrientation(LinearLayout.VERTICAL); b.setGravity(Gravity.CENTER); b.setPadding(dp(4),dp(8),dp(4),dp(8)); TextView l=text(label,9,muted); l.setGravity(Gravity.CENTER); l.setPadding(0,0,0,2); b.addView(l); TextView v=text(value,17,color); v.setTypeface(Typeface.DEFAULT_BOLD); v.setGravity(Gravity.CENTER); v.setPadding(0,0,0,0); b.addView(v); return b; }
-    private LinearLayout toolTile(String label,int icon,int color,Runnable action){ LinearLayout box=new LinearLayout(this); box.setOrientation(LinearLayout.VERTICAL); box.setGravity(Gravity.CENTER); box.setPadding(dp(6),dp(8),dp(6),dp(8)); GradientDrawable g=new GradientDrawable(); g.setColor(panel2); g.setCornerRadius(dp(14)); g.setStroke(dp(1),Color.argb(185,Color.red(color),Color.green(color),Color.blue(color))); box.setBackground(g); box.setElevation(dp(2)); android.widget.ImageView iv=new android.widget.ImageView(this); iv.setImageResource(icon); iv.setColorFilter(color); box.addView(iv,new LinearLayout.LayoutParams(dp(30),dp(30))); TextView t=text(UiI18n.t(this,label),11,silver); t.setGravity(Gravity.CENTER); t.setSingleLine(true); t.setPadding(0,dp(5),0,0); box.addView(t,new LinearLayout.LayoutParams(-1,-2)); LinearLayout.LayoutParams m=new LinearLayout.LayoutParams(-1,-1); m.setMargins(dp(4),dp(4),dp(4),dp(4)); box.setLayoutParams(m); box.setOnClickListener(v->navigate(label,action)); box.setClickable(true); box.setFocusable(true); screens.put(label,action); return box; }
+    private LinearLayout toolTile(String label,int icon,int color,Runnable action){ LinearLayout box=new LinearLayout(this); box.setOrientation(LinearLayout.VERTICAL); box.setGravity(Gravity.CENTER); box.setPadding(dp(6),dp(8),dp(6),dp(8)); GradientDrawable g=new GradientDrawable(); g.setColor(panel2); g.setCornerRadius(dp(14)); g.setStroke(dp(1),Color.argb(185,Color.red(color),Color.green(color),Color.blue(color))); box.setBackground(g); box.setElevation(dp(2)); android.widget.ImageView iv=new android.widget.ImageView(this); iv.setImageResource(icon); iv.setColorFilter(color); box.addView(iv,new LinearLayout.LayoutParams(dp(30),dp(30))); TextView t=text(UiI18n.t(this,label),11,silver); t.setGravity(Gravity.CENTER); t.setSingleLine(true); t.setPadding(0,dp(5),0,0); box.addView(t,new LinearLayout.LayoutParams(-1,-2)); LinearLayout.LayoutParams m=new LinearLayout.LayoutParams(-1,-1); m.setMargins(dp(4),dp(4),dp(4),dp(4)); box.setLayoutParams(m); box.setTag("nav:"+label); box.setOnClickListener(v->navigate(label,action)); box.setClickable(true); box.setFocusable(true); screens.put(label,action); return box; }
 
     private void showIntercept(){
         clear();
@@ -329,13 +334,20 @@ public class MainActivity extends Activity {
         about.addView(text(getString(R.string.about_company_body),14,silver));
         LinearLayout contact=card(getString(R.string.contact_us)); addContactRow(contact,"WEBSITE","nexvary.com",R.drawable.ic_website,cyan,()->openUrl("https://nexvary.com/")); addContactRow(contact,"EMAIL","info@nexvary.com",R.drawable.ic_email,cyan,()->openEmail("info@nexvary.com")); addContactRow(contact,"FACEBOOK","NEXVARY",R.drawable.ic_facebook,cyan,()->openUrl("https://www.facebook.com/share/14p9krEn5ij/")); addContactRow(contact,"YOUTUBE","@NexvaryInc",R.drawable.ic_youtube,cyan,()->openUrl("https://www.youtube.com/@NexvaryInc")); addContactRow(contact,"X (TWITTER)","@Nexvary",R.drawable.ic_x,cyan,()->openUrl("https://x.com/Nexvary"));
         TextView slogan=text("SECURE TODAY  •  PROTECT TOMORROW",12,gold); slogan.setGravity(Gravity.CENTER); contact.addView(slogan);
-        Button exit=outlineIconButton("⏻  "+getString(R.string.exit_app),danger,0); exit.setOnClickListener(v->confirmExit()); LinearLayout.LayoutParams ep=new LinearLayout.LayoutParams(-1,dp(50)); ep.setMargins(0,dp(8),0,0); contact.addView(exit,ep);
+        Button exit=outlineIconButton("⏻  "+getString(R.string.exit_app),danger,0); exit.setTag("app:exit"); exit.setOnClickListener(v->confirmExit()); LinearLayout.LayoutParams ep=new LinearLayout.LayoutParams(-1,dp(50)); ep.setMargins(0,dp(8),0,0); contact.addView(exit,ep);
     }
     private void addContactRow(LinearLayout host,String label,String value,int icon,int color,Runnable action){ LinearLayout row=new LinearLayout(this); row.setOrientation(LinearLayout.HORIZONTAL); row.setGravity(Gravity.CENTER_VERTICAL); row.setPadding(dp(12),dp(8),dp(12),dp(8)); GradientDrawable g=new GradientDrawable(); g.setColor(panel2); g.setCornerRadius(dp(14)); g.setStroke(dp(1),line); row.setBackground(g); android.widget.ImageView iv=new android.widget.ImageView(this); iv.setImageResource(icon); iv.setColorFilter(color); row.addView(iv,new LinearLayout.LayoutParams(dp(30),dp(30))); TextView l=text(label,11,color); l.setTypeface(Typeface.DEFAULT_BOLD); l.setSingleLine(true); row.addView(l,new LinearLayout.LayoutParams(0,-2,.9f)); TextView val=text(value,12,silver); val.setSingleLine(true); row.addView(val,new LinearLayout.LayoutParams(0,-2,1.2f)); TextView arrow=text("›",28,silver); arrow.setGravity(Gravity.CENTER); row.addView(arrow,new LinearLayout.LayoutParams(dp(32),-2)); row.setOnClickListener(v->action.run()); row.setClickable(true); row.setFocusable(true); LinearLayout.LayoutParams lp=new LinearLayout.LayoutParams(-1,dp(58)); lp.setMargins(0,dp(4),0,dp(4)); host.addView(row,lp); }
     private void openUrl(String url){ try{ Intent i=new Intent(Intent.ACTION_VIEW,android.net.Uri.parse(url)); startActivity(i); }catch(Exception e){ Toast.makeText(this,getString(R.string.no_browser),Toast.LENGTH_LONG).show(); } }
     private void openEmail(String email){ try{ Intent i=new Intent(Intent.ACTION_SENDTO,android.net.Uri.parse("mailto:"+email)); startActivity(i); }catch(Exception e){ Toast.makeText(this,getString(R.string.no_email_app),Toast.LENGTH_LONG).show(); } }
-    private void confirmExit(){ new AlertDialog.Builder(this).setTitle(getString(R.string.exit_app)).setMessage(getString(R.string.exit_confirm)).setNegativeButton(getString(R.string.cancel),null).setPositiveButton(getString(R.string.exit_app),(d,w)->{ AuthSession.revoke(); finishAffinity(); }).show(); }
+    private void confirmExit(){ exitDialog = new AlertDialog.Builder(this).setTitle(getString(R.string.exit_app)).setMessage(getString(R.string.exit_confirm)).setNegativeButton(getString(R.string.cancel),null).setPositiveButton(getString(R.string.exit_app),(d,w)->{ exitApplication(); }).show(); }
 
+    private void exitApplication(){
+        AuthSession.revoke();
+        stopService(new Intent(this, com.nexvary.trafficlab.vpn.LabVpnService.class));
+        stopService(new Intent(this, com.nexvary.trafficlab.tls.EmbeddedProxyService.class));
+        server.stop();
+        finishAndRemoveTask();
+    }
     private String headers(LabRequest r){StringBuilder b=new StringBuilder();for(var e:r.headers.entrySet())b.append(e.getKey()).append(": ").append(e.getValue()).append('\n');return b.toString();}
     private String hex(byte[] a){StringBuilder b=new StringBuilder();for(byte x:a)b.append(String.format("%02X ",x));return b.toString();}
     private int dp(int v){return (int)(v*getResources().getDisplayMetrics().density+0.5f);} }

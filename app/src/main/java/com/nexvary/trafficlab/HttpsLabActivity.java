@@ -1,128 +1,100 @@
 package com.nexvary.trafficlab;
 
 import android.app.Activity;
-import android.app.AlertDialog;
-import android.content.ActivityNotFoundException;
-import android.content.Intent;
-import android.content.Context;
-import android.content.pm.ResolveInfo;
-import android.graphics.Color;
-import android.net.Uri;
-import android.os.Bundle;
+import android.content.*;
+import android.os.*;
+import android.provider.Settings;
 import android.view.View;
 import android.widget.*;
-import com.nexvary.trafficlab.core.PcapdroidCapturePlan;
-import java.util.*;
+import android.graphics.Color;
+import com.nexvary.trafficlab.tls.*;
+import java.io.OutputStream;
+import java.util.List;
 
-/** First-stage external TLS engine integration, using PCAPdroid's public API. */
-public class HttpsLabActivity extends Activity {
-    private static final int STATUS = 901, START = 902, STOP = 903;
-    private TextView state;
-    private EditText target;
-    private Button start;
-    private int engineVersion;
-    private boolean engineRunning;
-
-    @Override protected void attachBaseContext(Context base) { super.attachBaseContext(LocaleController.wrap(base)); }
-    private String tr(String ar, String en) { return "ar".equals(LocaleController.getLanguage(this)) ? ar : en; }
-    @Override public void onCreate(Bundle saved) {
+/** Self-contained explicit HTTPS lab proxy, CA export, request gate and flow viewer. */
+public final class HttpsLabActivity extends Activity {
+    private final Handler handler=new Handler(Looper.getMainLooper());
+    private TextView state, response;
+    private EditText host, port, request;
+    private CheckBox pause;
+    private Spinner selector;
+    private List<EmbeddedTlsProxy.Flow> visible=java.util.Collections.emptyList();
+    private long selected=-1;
+    private String signature="";
+    private byte[] publicCertificate;
+    private boolean foreground;
+    private final Runnable poll=new Runnable(){public void run(){if(foreground){refresh();handler.postDelayed(this,1000);}}};
+    @Override protected void attachBaseContext(Context base){super.attachBaseContext(LocaleController.wrap(base));}
+    private String tr(String ar,String en){return "ar".equals(LocaleController.getLanguage(this))?ar:en;}
+    @Override public void onCreate(Bundle saved){
         super.onCreate(saved);
-        if (!AuthSession.isUnlocked()) { startActivity(new Intent(this, LoginActivity.class)); finish(); return; }
-        LinearLayout page = new LinearLayout(this);
-        page.setOrientation(LinearLayout.VERTICAL);
-        page.setPadding(24, 24, 24, 24);
-        page.setBackgroundColor(Color.rgb(2, 9, 18));
-        page.setLayoutDirection("ar".equals(LocaleController.getLanguage(this)) ? View.LAYOUT_DIRECTION_RTL : View.LAYOUT_DIRECTION_LTR);
-        ScrollView scroll = new ScrollView(this); scroll.addView(page); setContentView(scroll);
-        label(page, tr("مختبر HTTPS", "HTTPS Lab"), 25);
-        label(page, tr("المحرك الخارجي: PCAPdroid + mitmproxy، على هذا الهاتف. هذه المرحلة تتحكم في الالتقاط؛ عرض البيانات المفكوكة يكون داخل PCAPdroid.",
-                "External engine: PCAPdroid + mitmproxy on this phone. This stage controls capture; decrypted data is viewed in PCAPdroid."), 16);
-        label(page, tr("جهّز إضافة TLS وشهادة المختبر داخل PCAPdroid أولًا. بدء الالتقاط لا يثبت نجاح فك HTTPS. قد يمنع Pinning أو تشفير داخل البيانات عرض المحتوى.",
-                "Configure the TLS addon and lab CA in PCAPdroid first. Starting capture does not prove HTTPS decryption. Pinning or payload encryption may prevent inspection."), 15);
-        target = new EditText(this); target.setSingleLine(true); target.setTextColor(Color.WHITE);
-        target.setHintTextColor(Color.LTGRAY); target.setHint("com.nexvary.training");
-        target.setContentDescription(tr("اسم حزمة تطبيق التدريب", "Training application package")); page.addView(target);
-        if (saved != null) target.setText(saved.getString("target", ""));
-        action(page, tr("اختيار تطبيق", "Choose application"), this::chooseApp);
-        state = label(page, tr("لم يتم التحقق من المحرك بعد", "Engine not checked yet"), 15);
-        action(page, tr("فحص المحرك وحالة الالتقاط", "Check engine and capture status"), () -> control("get_status", STATUS));
-        start = action(page, tr("بدء التقاط التطبيق وطلب فك HTTPS", "Capture application and request HTTPS decryption"), this::startCapture);
-        start.setEnabled(false);
-        action(page, tr("إيقاف جلسة PCAPdroid الحالية", "Stop current PCAPdroid capture"), () -> control("stop", STOP));
-        action(page, tr("فتح PCAPdroid للإعداد والتحليل", "Open PCAPdroid for setup and analysis"), () -> {
-            Intent launch = getPackageManager().getLaunchIntentForPackage(PcapdroidCapturePlan.PACKAGE);
-            if (launch == null) missingEngine(); else startActivity(launch);
+        if(!AuthSession.isUnlocked()){startActivity(new Intent(this,LoginActivity.class));finish();return;}
+        LinearLayout page=new LinearLayout(this);page.setOrientation(LinearLayout.VERTICAL);page.setPadding(24,24,24,24);page.setBackgroundColor(Color.rgb(2,9,18));
+        page.setLayoutDirection("ar".equals(LocaleController.getLanguage(this))?View.LAYOUT_DIRECTION_RTL:View.LAYOUT_DIRECTION_LTR);
+        ScrollView scroll=new ScrollView(this);scroll.addView(page);setContentView(scroll);
+        text(page,tr("مختبر HTTPS المدمج","Embedded HTTPS Lab"),24);
+        text(page,tr("المحرك داخل NEXVARY؛ لا يحتاج PCAPdroid. اضبط Proxy في تطبيق التدريب أو إعدادات Wi-Fi على 127.0.0.1 والمنفذ 8888. يقبل المحرك وجهة المختبر المحددة فقط.",
+                "Engine runs inside NEXVARY. Configure your training app or Wi-Fi proxy as 127.0.0.1:8888. Only the configured lab destination is accepted."),15);
+        text(page,tr("هذا المسار يدعم HTTPS عبر CONNECT وHTTP/1.1، وليس VPN لالتقاط كل التطبيقات. التطبيق المستهدف يجب أن يثق بشهادة المختبر. لا يدعم تجاوز Pinning أو QUIC أو ترقيات WebSocket بعد.",
+                "This path supports HTTPS CONNECT and HTTP/1.1, not all-app VPN capture. The target must trust the lab CA. Pinning bypass, QUIC and WebSocket upgrades are not implemented."),14);
+        host=input(page,"api.training.example","tls:host");host.setHint(tr("اسم خادم التدريب","Training server hostname"));
+        port=input(page,"443","tls:port");port.setInputType(android.text.InputType.TYPE_CLASS_NUMBER);
+        pause=new CheckBox(this);pause.setText(tr("إيقاف الطلب قبل إرساله للتحرير","Pause request before forwarding"));pause.setTextColor(Color.WHITE);pause.setChecked(true);page.addView(pause);
+        state=text(page,"",14);state.setTag("tls:state");
+        button(page,tr("إنشاء وتصدير شهادة المختبر","Create and export lab CA"),"tls:certificate",this::exportCertificate);
+        button(page,tr("إعدادات شهادات Android","Android certificate settings"),"tls:settings",()->startActivity(new Intent(Settings.ACTION_SECURITY_SETTINGS)));
+        button(page,tr("تشغيل المحرك","Start engine"),"tls:start",()->{
+            try{
+                new EmbeddedTlsProxy(null,host.getText().toString().trim(),Integer.parseInt(port.getText().toString()),true,javax.net.ssl.SSLContext.getDefault()).close();
+                startForegroundService(new Intent(this,EmbeddedProxyService.class).putExtra("host",host.getText().toString().trim())
+                        .putExtra("port",Integer.parseInt(port.getText().toString())).putExtra("pause",pause.isChecked()));
+            }catch(Exception error){state.setText(error.getMessage());}
         });
-        action(page, tr("دليل إعداد TLS الرسمي", "Official TLS setup guide"), () -> startActivity(new Intent(Intent.ACTION_VIEW,
-                Uri.parse("https://emanuele-f.github.io/PCAPdroid/tls_decryption.html"))));
-        label(page, tr("ملف PCAP يُحفظ لدى المحرك في Downloads/PCAPdroid؛ سقف التفريغ 64 MiB. وصول التفريغ للسقف لا يعني توقف الالتقاط. لا يحتوي PCAP التقليدي تلقائيًا على النص المفكوك.",
-                "PCAP is saved by the engine in Downloads/PCAPdroid, with a 64 MiB dump limit. Reaching the limit does not mean capture stopped. A standard PCAP does not automatically contain decrypted plaintext."), 14);
-        action(page, tr("رجوع", "Back"), this::finish);
+        button(page,tr("إيقاف المحرك","Stop engine"),"tls:stop",()->{stopService(new Intent(this,EmbeddedProxyService.class));refresh();});
+        selector=new Spinner(this);page.addView(selector);selector.setOnItemSelectedListener(new AdapterView.OnItemSelectedListener(){
+            public void onNothingSelected(AdapterView<?> parent){}
+            public void onItemSelected(AdapterView<?> parent,View view,int position,long id){if(position<visible.size()){selected=visible.get(position).id;showSelected();}}
+        });
+        text(page,tr("الطلب: يمكن تعديل النص عند حالة PAUSED. افصل الترويسات عن الجسم بسطر فارغ.","Request: editable in PAUSED state. Separate headers and body with a blank line."),14);
+        request=input(page,"","tls:request");request.setSingleLine(false);request.setMinLines(6);request.setMaxLines(16);
+        button(page,tr("تمرير الطلب الأصلي","Forward original request"),"tls:original",()->{try{if(EmbeddedProxyService.engine==null)throw new IllegalStateException("Engine stopped");EmbeddedProxyService.engine.decide(selected,null,false);refresh();}catch(Exception error){state.setText(error.getMessage());}});
+        button(page,tr("تمرير الطلب المعدل","Forward edited request"),"tls:forward",()->decide(false));
+        button(page,tr("إسقاط الطلب","Drop request"),"tls:drop",()->decide(true));
+        response=text(page,"",13);response.setTextIsSelectable(true);response.setTag("tls:response");
+        button(page,tr("رجوع","Back"),"tls:back",this::finish);
     }
-    private TextView label(LinearLayout page, String text, int size) {
-        TextView view = new TextView(this); view.setText(text); view.setTextColor(Color.WHITE);
-        view.setTextSize(size); view.setPadding(0, 12, 0, 16); page.addView(view); return view;
+    private TextView text(LinearLayout page,String value,int size){TextView v=new TextView(this);v.setText(value);v.setTextSize(size);v.setTextColor(Color.WHITE);v.setPadding(0,12,0,16);page.addView(v);return v;}
+    private EditText input(LinearLayout page,String value,String tag){EditText v=new EditText(this);v.setText(value);v.setTextColor(Color.WHITE);v.setHintTextColor(Color.LTGRAY);v.setSingleLine(true);v.setTag(tag);page.addView(v);return v;}
+    private void button(LinearLayout page,String title,String tag,Runnable action){Button b=new Button(this);b.setText(title);b.setAllCaps(false);b.setTag(tag);b.setOnClickListener(v->action.run());page.addView(b);}
+    private void exportCertificate(){
+        state.setText(tr("جار تجهيز الشهادة…","Preparing certificate…"));
+        new Thread(()->{try{byte[] certificate=LabCertificateAuthority.open(this).encoded();runOnUiThread(()->{
+            if(isFinishing()||isDestroyed())return;publicCertificate=certificate;
+            startActivityForResult(new Intent(Intent.ACTION_CREATE_DOCUMENT).setType("application/x-x509-ca-cert").addCategory(Intent.CATEGORY_OPENABLE).putExtra(Intent.EXTRA_TITLE,"NEXVARY-Lab-CA.crt"),77);
+        });}catch(Exception error){runOnUiThread(()->state.setText(error.toString()));}},"nexvary-ca-export").start();
     }
-    private Button action(LinearLayout page, String text, Runnable task) {
-        Button button = new Button(this); button.setText(text); button.setAllCaps(false);
-        button.setOnClickListener(v -> task.run()); page.addView(button); return button;
-    }
-    private void chooseApp() {
-        Intent launcher = new Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_LAUNCHER);
-        Map<String, String> apps = new TreeMap<>();
-        for (ResolveInfo info : getPackageManager().queryIntentActivities(launcher, 0))
-            apps.put(info.activityInfo.packageName, info.loadLabel(getPackageManager()).toString());
-        List<String> packages = new ArrayList<>(apps.keySet());
-        String[] labels = new String[packages.size()];
-        for (int i=0; i<labels.length; i++) labels[i] = apps.get(packages.get(i)) + "\n" + packages.get(i);
-        new AlertDialog.Builder(this).setTitle(tr("تطبيق التدريب", "Training application"))
-                .setItems(labels, (dialog, which) -> target.setText(packages.get(which))).show();
-    }
-    private Intent command(String action) {
-        return new Intent(Intent.ACTION_VIEW).setClassName(PcapdroidCapturePlan.PACKAGE, PcapdroidCapturePlan.CONTROL).putExtra("action", action);
-    }
-    private void control(String action, int requestCode) { launch(command(action), requestCode); }
-    private void launch(Intent intent, int requestCode) {
-        try { startActivityForResult(intent, requestCode); }
-        catch (ActivityNotFoundException | SecurityException error) { missingEngine(); }
-    }
-    private void missingEngine() {
-        engineVersion = 0; start.setEnabled(false);
-        state.setText(tr("PCAPdroid غير مثبت أو واجهته غير متاحة. ثبته من مصدره الرسمي ثم افحص المحرك.",
-                "PCAPdroid is missing or its API is unavailable. Install it from its official source, then check the engine."));
-    }
-    private void startCapture() {
-        if (engineVersion < PcapdroidCapturePlan.MIN_VERSION_CODE || engineRunning) return;
-        try {
-            Intent intent = command("start");
-            for (Map.Entry<String, Object> entry : PcapdroidCapturePlan.start(target.getText().toString().trim(), System.currentTimeMillis()).entrySet()) {
-                Object value = entry.getValue();
-                if (value instanceof Boolean) intent.putExtra(entry.getKey(), (Boolean)value);
-                else if (value instanceof Integer) intent.putExtra(entry.getKey(), (Integer)value);
-                else intent.putExtra(entry.getKey(), (String)value);
-            }
-            start.setEnabled(false); launch(intent, START);
-        } catch (IllegalArgumentException error) { target.setError(tr("اختر تطبيقًا أو أدخل اسم حزمة صحيحًا", "Choose an app or enter a valid package")); }
-    }
-    @Override protected void onActivityResult(int code, int result, Intent data) {
-        super.onActivityResult(code, result, data);
-        if (code != STATUS && code != START && code != STOP) return;
-        if (result != RESULT_OK) {
-            start.setEnabled(false);
-            state.setText(tr("الطلب لم يكتمل. افحص المحرك وأكمل إعداد الشهادة والصلاحيات.", "Request did not complete. Check engine, certificate setup and permissions.")); return;
-        }
-        if (code == STATUS) {
-            engineVersion = data == null ? 0 : data.getIntExtra("version_code", 0);
-            engineRunning = data != null && data.getBooleanExtra("running", false);
-            start.setEnabled(engineVersion >= PcapdroidCapturePlan.MIN_VERSION_CODE && !engineRunning);
-            state.setText("PCAPdroid " + (data == null ? "?" : data.getStringExtra("version_name")) + "\n" +
-                    (engineVersion < PcapdroidCapturePlan.MIN_VERSION_CODE ? tr("يجب تحديث المحرك لدعم إعدادات TLS المطلوبة", "Update engine to support the required TLS settings") :
-                    engineRunning ? tr("توجد جلسة التقاط قيد التشغيل", "A capture session is running") : tr("المحرك متاح. جاهزية TLS تحتاج تحققًا عمليًا.", "Engine available. TLS readiness requires a live check.")));
-        } else {
-            start.setEnabled(false);
-            state.setText(code == START ? tr("أكد المحرك بدء الالتقاط. افتحه للتحقق من محتوى HTTPS؛ فك التشفير غير مؤكد بعد.",
-                    "Engine acknowledged capture start. Open it to verify HTTPS content; decryption is not yet confirmed.") : tr("أكد المحرك إيقاف الالتقاط. افحص الحالة قبل جلسة جديدة.", "Engine acknowledged capture stop. Check status before a new session."));
+    @Override protected void onActivityResult(int code,int result,Intent data){super.onActivityResult(code,result,data);
+        if(code==77 && result==RESULT_OK && data!=null && data.getData()!=null && publicCertificate!=null){
+            try(OutputStream out=getContentResolver().openOutputStream(data.getData())){if(out==null)throw new java.io.IOException("Cannot open document");out.write(publicCertificate);state.setText(tr("صُدرت الشهادة العامة فقط. ثبّتها كشهادة CA من إعدادات Android وأعد تطبيق التدريب.","Public CA exported. Install it as a CA in Android settings and configure the training app."));}
+            catch(Exception error){state.setText(error.toString());}finally{publicCertificate=null;}
         }
     }
-    @Override protected void onSaveInstanceState(Bundle out) { if (target != null) out.putString("target", target.getText().toString()); super.onSaveInstanceState(out); }
+    private void decide(boolean drop){try{EmbeddedTlsProxy engine=EmbeddedProxyService.engine;if(engine==null)throw new IllegalStateException("Engine stopped");
+        String edited=request.getText().toString().replace("\r\n","\n").replace("\n","\r\n");engine.decide(selected,drop?null:edited,drop);refresh();
+    }catch(Exception error){state.setText(error.getMessage());}}
+    private void refresh(){
+        if(state==null)return;state.setText(EmbeddedProxyService.state+" · 127.0.0.1:8888");
+        EmbeddedTlsProxy engine=EmbeddedProxyService.engine;visible=engine==null?java.util.Collections.emptyList():engine.flows();
+        StringBuilder key=new StringBuilder();String[] labels=new String[visible.size()];int position=0;
+        for(int i=0;i<visible.size();i++){EmbeddedTlsProxy.Flow flow=visible.get(i);labels[i]="#"+flow.id+" "+flow.host+" · "+flow.status;key.append(labels[i]);if(flow.id==selected)position=i;}
+        if(!signature.equals(key.toString())){signature=key.toString();selector.setAdapter(new ArrayAdapter<>(this,android.R.layout.simple_spinner_dropdown_item,labels));selector.setSelection(position);}
+        if(selected<0 && !visible.isEmpty())selected=visible.get(0).id;
+        showSelected();
+    }
+    private void showSelected(){for(EmbeddedTlsProxy.Flow flow:visible)if(flow.id==selected){
+        if(!request.hasFocus() || !flow.status.equals("PAUSED"))request.setText(flow.request);
+        request.setEnabled(flow.status.equals("PAUSED"));response.setText(flow.status+"\n"+flow.error+"\n"+flow.response);return;
+    }}
+    @Override protected void onResume(){super.onResume();foreground=true;handler.post(poll);}
+    @Override protected void onPause(){foreground=false;handler.removeCallbacks(poll);super.onPause();}
 }
