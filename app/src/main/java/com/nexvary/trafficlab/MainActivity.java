@@ -358,8 +358,10 @@ public class MainActivity extends Activity {
             if("Dashboard".equals(currentScreen))showDashboard();else if("History".equals(currentScreen))showHistory();
         }
     }
+    private long observedCaptureClear;
     private int importCapturedTraffic(){
         int added=0;
+        if(observedCaptureClear!=CapturedTraffic.clearVersion()){observedCaptureClear=CapturedTraffic.clearVersion();history.clear();evidence.clear();importedCaptures.clear();lastRequest=null;lastResponse=null;added++;}
         for(CapturedTraffic.Exchange exchange:CapturedTraffic.all()){
             if(!importedCaptures.add(exchange.id()))continue;
             LabRequest request=CapturedTraffic.request(exchange);LabResponse response=CapturedTraffic.response(exchange);
@@ -373,6 +375,7 @@ public class MainActivity extends Activity {
     }
     private void exitApplication(){
         AuthSession.revoke();
+        com.nexvary.trafficlab.tls.EmbeddedProxyService.stopNow();
         stopService(new Intent(this, com.nexvary.trafficlab.vpn.LabVpnService.class));
         stopService(new Intent(this, com.nexvary.trafficlab.tls.EmbeddedProxyService.class));
         server.stop();

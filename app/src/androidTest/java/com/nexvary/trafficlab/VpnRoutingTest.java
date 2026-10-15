@@ -25,7 +25,7 @@ public final class VpnRoutingTest extends InstrumentationTestCase {
             Thread.sleep(500);
             context.startActivity(new Intent().setClassName("com.nexvary.trafficfixture","com.nexvary.trafficfixture.TrafficFixtureActivity").addFlags(Intent.FLAG_ACTIVITY_NEW_TASK));
             assertTrue("Training app did not return: "+LabVpnService.state,done.await(40,TimeUnit.SECONDS));
-            assertEquals("TCP_UDP_DNS_OK",result.get());
+            assertEquals(LabVpnService.diagnostics(),"TCP_UDP_DNS_OK",result.get());
             long[] counters=LabVpnService.stats();assertTrue("Traffic bypassed native tunnel",counters[0]>0&&counters[2]>0);
             context.stopService(new Intent(context,LabVpnService.class));
             until=System.currentTimeMillis()+5000;while(!LabVpnService.state.equals("STOPPED")&&System.currentTimeMillis()<until)Thread.sleep(25);

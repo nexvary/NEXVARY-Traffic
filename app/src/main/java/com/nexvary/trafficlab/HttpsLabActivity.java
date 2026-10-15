@@ -15,8 +15,9 @@ import java.util.List;
 public final class HttpsLabActivity extends Activity {
     private final Handler handler=new Handler(Looper.getMainLooper());
     private TextView state, response;
-    private EditText host, port, request;
-    private CheckBox pause;
+    private EditText host, port, request, responseRequest;
+    private long responseRendered=-1;
+    private CheckBox pause,pauseResponse;
     private Spinner selector;
     private List<EmbeddedTlsProxy.Flow> visible=java.util.Collections.emptyList();
     private long selected=-1, rendered=-1;
@@ -35,11 +36,12 @@ public final class HttpsLabActivity extends Activity {
         text(page,tr("مختبر HTTPS المدمج","Embedded HTTPS Lab"),24);
         text(page,tr("المحرك داخل NEXVARY؛ لا يحتاج PCAPdroid. اضبط Proxy في تطبيق التدريب أو إعدادات Wi-Fi على 127.0.0.1 والمنفذ 8888. يقبل المحرك وجهة المختبر المحددة فقط.",
                 "Engine runs inside NEXVARY. Configure your training app or Wi-Fi proxy as 127.0.0.1:8888. Only the configured lab destination is accepted."),15);
-        text(page,tr("هذا المسار يدعم HTTPS عبر CONNECT وHTTP/1.1، وليس VPN لالتقاط كل التطبيقات. التطبيق المستهدف يجب أن يثق بشهادة المختبر. لا يدعم تجاوز Pinning أو QUIC أو ترقيات WebSocket بعد.",
-                "This path supports HTTPS CONNECT and HTTP/1.1, not all-app VPN capture. The target must trust the lab CA. Pinning bypass, QUIC and WebSocket upgrades are not implemented."),14);
+        text(page,tr("يدعم محرك الفحص CONNECT وHTTP/1.1. استخدم صفحة VPN أدناه لتوجيه تطبيقات التدريب. يجب أن يثق التطبيق بشهادة المختبر؛ Pinning وQUIC وHTTP/2 وترقيات WebSocket لا تُفك بهذا المحرك.",
+                "Inspection supports CONNECT and HTTP/1.1. Open VPN below to route training apps. CA trust is required; pinning, QUIC, HTTP/2 and WebSocket upgrades are not decrypted by this engine."),14);
         host=input(page,"api.training.example","tls:host");host.setHint(tr("اسم خادم التدريب","Training server hostname"));
         port=input(page,"443","tls:port");port.setInputType(android.text.InputType.TYPE_CLASS_NUMBER);
         pause=new CheckBox(this);pause.setText(tr("إيقاف الطلب قبل إرساله للتحرير","Pause request before forwarding"));pause.setTextColor(Color.WHITE);pause.setChecked(true);page.addView(pause);
+        pauseResponse=new CheckBox(this);pauseResponse.setText(tr("إيقاف الاستجابة النصية قبل تسليمها (حتى 1 MiB)","Pause response before delivery (up to 1 MiB)"));pauseResponse.setTextColor(Color.WHITE);page.addView(pauseResponse);
         state=text(page,"",14);state.setTag("tls:state");
         button(page,tr("إنشاء وتصدير شهادة المختبر","Create and export lab CA"),"tls:certificate",this::exportCertificate);
         button(page,tr("إعدادات شهادات Android","Android certificate settings"),"tls:settings",()->startActivity(new Intent(Settings.ACTION_SECURITY_SETTINGS)));
@@ -47,7 +49,7 @@ public final class HttpsLabActivity extends Activity {
             try{
                 new EmbeddedTlsProxy(null,host.getText().toString().trim(),Integer.parseInt(port.getText().toString()),true,javax.net.ssl.SSLContext.getDefault()).close();
                 startForegroundService(new Intent(this,EmbeddedProxyService.class).putExtra("host",host.getText().toString().trim())
-                        .putExtra("port",Integer.parseInt(port.getText().toString())).putExtra("pause",pause.isChecked()));
+                        .putExtra("port",Integer.parseInt(port.getText().toString())).putExtra("pause",pause.isChecked()).putExtra("pauseResponse",pauseResponse.isChecked()));
             }catch(Exception error){state.setText(error.getMessage());}
         });
         button(page,tr("إيقاف المحرك","Stop engine"),"tls:stop",()->{stopService(new Intent(this,EmbeddedProxyService.class));refresh();});
@@ -66,6 +68,11 @@ public final class HttpsLabActivity extends Activity {
         button(page,tr("تمرير الطلب المعدل","Forward edited request"),"tls:forward",()->decide(false));
         button(page,tr("إسقاط الطلب","Drop request"),"tls:drop",()->decide(true));
         response=text(page,"",13);response.setTextIsSelectable(true);response.setTag("tls:response");
+        text(page,tr("تحرير الاستجابة: UTF-8 غير المضغوط فقط. يمكن دائمًا تمرير الأصل أو إسقاطه.","Response editor: uncompressed UTF-8 text. Forward Original and Drop also support non-editable responses."),14);
+        responseRequest=input(page,"","tls:response-editor");responseRequest.setSingleLine(false);responseRequest.setMinLines(4);responseRequest.setMaxLines(12);
+        button(page,tr("تمرير الاستجابة الأصلية","Forward original response"),"tls:response-original",()->responseDecision(false,false));
+        button(page,tr("تمرير الاستجابة المعدلة","Forward edited response"),"tls:response-forward",()->responseDecision(true,false));
+        button(page,tr("إسقاط الاستجابة","Drop response"),"tls:response-drop",()->responseDecision(false,true));
         button(page,tr("رجوع","Back"),"tls:back",this::finish);
     }
     private TextView text(LinearLayout page,String value,int size){TextView v=new TextView(this);v.setText(value);v.setTextSize(size);v.setTextColor(Color.WHITE);v.setPadding(0,12,0,16);page.addView(v);return v;}
@@ -84,6 +91,10 @@ public final class HttpsLabActivity extends Activity {
             catch(Exception error){state.setText(error.toString());}finally{publicCertificate=null;}
         }
     }
+    private void responseDecision(boolean edit,boolean drop){try{
+        EmbeddedTlsProxy engine=EmbeddedProxyService.engine;if(engine==null)throw new IllegalStateException("Engine stopped");
+        String value=responseRequest.getText().toString().replace("\r\n","\n").replace("\n","\r\n");engine.decideResponse(selected,edit?value:null,drop);refresh();
+    }catch(Exception error){state.setText(error.getMessage());}}
     private void decide(boolean drop){try{EmbeddedTlsProxy engine=EmbeddedProxyService.engine;if(engine==null)throw new IllegalStateException("Engine stopped");
         String edited=request.getText().toString().replace("\r\n","\n").replace("\n","\r\n");engine.decide(selected,drop?null:edited,drop);refresh();
     }catch(Exception error){state.setText(error.getMessage());}}
@@ -99,7 +110,9 @@ public final class HttpsLabActivity extends Activity {
     private void showSelected(){for(EmbeddedTlsProxy.Flow flow:visible)if(flow.id==selected){
         if(rendered!=flow.id || !request.hasFocus() || !flow.status.equals("PAUSED"))request.setText(flow.request);
         rendered=flow.id;
-        request.setEnabled(flow.status.equals("PAUSED"));response.setText(flow.status+"\n"+flow.error+"\n"+flow.response);return;
+        if(flow.status.equals("RESPONSE_PAUSED")&&responseRendered!=flow.id){responseRequest.setText(flow.responseTemplate);responseRendered=flow.id;}
+        responseRequest.setEnabled(flow.status.equals("RESPONSE_PAUSED")&&!flow.responseTemplate.isEmpty());
+        request.setEnabled(flow.status.equals("PAUSED"));response.setText(flow.status+"\n"+flow.error+"\n"+flow.responseEditError+"\n"+flow.response);return;
     }}
     @Override protected void onResume(){super.onResume();foreground=true;handler.post(poll);}
     @Override protected void onPause(){foreground=false;handler.removeCallbacks(poll);super.onPause();}

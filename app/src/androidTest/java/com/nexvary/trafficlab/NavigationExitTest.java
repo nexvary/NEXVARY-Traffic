@@ -20,6 +20,7 @@ public class NavigationExitTest extends InstrumentationTestCase {
     }
     @Override protected void tearDown() throws Exception {
         getInstrumentation().getTargetContext().stopService(new Intent(getInstrumentation().getTargetContext(),EmbeddedProxyService.class));
+        getInstrumentation().getTargetContext().stopService(new Intent(getInstrumentation().getTargetContext(),com.nexvary.trafficlab.vpn.LabVpnService.class));
         if(activity!=null && !activity.isFinishing())getInstrumentation().runOnMainSync(()->activity.finish());
         getInstrumentation().waitForIdleSync(); AuthSession.revoke(); super.tearDown();
     }
@@ -100,18 +101,25 @@ public class NavigationExitTest extends InstrumentationTestCase {
         long deadline=System.currentTimeMillis()+15000;
         while(EmbeddedProxyService.engine==null && System.currentTimeMillis()<deadline)Thread.sleep(50);
         assertNotNull("Embedded engine did not start: "+EmbeddedProxyService.state,EmbeddedProxyService.engine);
+        getInstrumentation().runOnMainSync(()->activity.startForegroundService(new Intent(activity,com.nexvary.trafficlab.vpn.LabVpnService.class).putExtra("packages",new String[]{"com.nexvary.trafficfixture"}).putExtra("host","localhost").putExtra("port",443)));
+        deadline=System.currentTimeMillis()+10000;
+        while(!com.nexvary.trafficlab.vpn.LabVpnService.state.equals("RUNNING")&&System.currentTimeMillis()<deadline)Thread.sleep(25);
+        assertEquals("RUNNING",com.nexvary.trafficlab.vpn.LabVpnService.state);
         Socket active=new Socket("127.0.0.1",8888);active.setSoTimeout(5000);
         active.getOutputStream().write("CONNECT localhost:443 HTTP/1.1\r\nHost: localhost\r\n\r\n".getBytes(java.nio.charset.StandardCharsets.US_ASCII));active.getOutputStream().flush();
         int headerState=0, headerBytes=0;while(headerState!=0x0d0a0d0a && headerBytes++<32768){int value=active.getInputStream().read();assertTrue("No CONNECT acknowledgement",value>=0);headerState=(headerState<<8)|value;}
         final int exitedTask=activity.getTaskId();
         click("nav:About");click("app:exit");AlertDialog dialog=(AlertDialog)field("exitDialog");
         getInstrumentation().runOnMainSync(()->dialog.getButton(AlertDialog.BUTTON_NEGATIVE).performClick());
-        assertFalse(activity.isFinishing());assertTrue(AuthSession.isUnlocked());assertTrue(EmbeddedProxyService.engine.isRunning());
+        assertFalse(activity.isFinishing());assertTrue(AuthSession.isUnlocked());assertTrue(EmbeddedProxyService.engine.isRunning());assertTrue(hev.htproxy.TProxyService.TProxyIsRunning());
         click("app:exit");AlertDialog confirm=(AlertDialog)field("exitDialog");
         getInstrumentation().runOnMainSync(()->confirm.getButton(AlertDialog.BUTTON_POSITIVE).performClick());getInstrumentation().waitForIdleSync();
         assertTrue(activity.isFinishing()||activity.isDestroyed());assertFalse(AuthSession.isUnlocked());
         deadline=System.currentTimeMillis()+5000;while(EmbeddedProxyService.engine!=null && System.currentTimeMillis()<deadline)Thread.sleep(25);
         assertNull("Exit left capture running",EmbeddedProxyService.engine);
+        deadline=System.currentTimeMillis()+5000;
+        while(!com.nexvary.trafficlab.vpn.LabVpnService.state.equals("STOPPED")&&System.currentTimeMillis()<deadline)Thread.sleep(25);
+        assertEquals("Exit left VPN active","STOPPED",com.nexvary.trafficlab.vpn.LabVpnService.state);assertFalse(hev.htproxy.TProxyService.TProxyIsRunning());
         try {assertEquals("Exit left an active TLS connection open",-1,active.getInputStream().read());}finally{active.close();}
         for(ActivityManager.AppTask task:activity.getSystemService(ActivityManager.class).getAppTasks())assertTrue("Exit left its task in recents",task.getTaskInfo().taskId!=exitedTask);
         try(Socket socket=new Socket()){socket.connect(new InetSocketAddress("127.0.0.1",8888),500);fail("Exit left proxy listener open");}catch(java.io.IOException expected){}

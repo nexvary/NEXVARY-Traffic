@@ -14,6 +14,8 @@ import java.util.*;
 public final class LabVpnService extends VpnService {
     public static final String ACTION_PACKET="com.nexvary.trafficlab.PACKET";
     public static volatile String state="STOPPED";
+    private static volatile LabVpnService instance;
+    public static String diagnostics(){LabVpnService current=instance;return current==null?state:state+" · "+(current.gateway==null?"":current.gateway.lastError);}
     private ParcelFileDescriptor tun;
     private LocalSocksGateway gateway;
     private final Handler handler=new Handler(Looper.getMainLooper());
@@ -32,7 +34,7 @@ public final class LabVpnService extends VpnService {
         PendingIntent open=PendingIntent.getActivity(this,71,new Intent(this,VpnLabActivity.class),PendingIntent.FLAG_IMMUTABLE|PendingIntent.FLAG_UPDATE_CURRENT);
         startForeground(7701,new Notification.Builder(this,"nexvary_lab_capture").setSmallIcon(R.drawable.ic_shield).setContentTitle("NEXVARY VPN Lab")
                 .setContentText("Selected training applications · TCP / UDP").setContentIntent(open).setOngoing(true).addAction(new Notification.Action.Builder(null,"Stop",stop).build()).build());
-        state="STARTING";
+        instance=this;state="STARTING";
         try{
             String[] packages=intent.getStringArrayExtra("packages");
             if(packages==null||packages.length==0)throw new IllegalArgumentException("Select at least one training application");
@@ -60,7 +62,7 @@ public final class LabVpnService extends VpnService {
     public static long[] stats(){try{return TProxyService.TProxyGetStats();}catch(LinkageError error){return new long[4];}}
     @Override public void onRevoke(){stopSelf();super.onRevoke();}
     @Override public void onDestroy(){
-        handler.removeCallbacks(monitor);active=false;
+        instance=null;handler.removeCallbacks(monitor);active=false;
         try{TProxyService.TProxyStopService();}catch(LinkageError ignored){}
         if(gateway!=null)gateway.close();gateway=null;
         try{if(tun!=null)tun.close();}catch(IOException ignored){}tun=null;

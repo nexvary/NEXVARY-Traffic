@@ -3,6 +3,7 @@ package com.nexvary.trafficlab.tls;
 import javax.net.ssl.*;
 import com.nexvary.trafficlab.core.CapturedTraffic;
 import com.nexvary.trafficlab.core.Http1Body;
+import com.nexvary.trafficlab.core.ResponseEditor;
 import java.net.*;
 import java.io.*;
 import java.nio.charset.StandardCharsets;
@@ -15,7 +16,11 @@ public final class EmbeddedTlsProxy implements AutoCloseable {
     public static final int MAX_BODY = 1024 * 1024, MAX_SAMPLE = 65536;
     public static final class Flow {
         public final long id; public final String host;
-        private long forwardingStarted;
+        private long forwardingStarted,upstreamElapsed;
+        public volatile String responseTemplate="", responseEditError="";
+        private final CountDownLatch responseDecision=new CountDownLatch(1);
+        private volatile String responseEdited;
+        private volatile boolean responseDropped;
         private String sent=""; private boolean responseTruncated;
         public volatile String request = "", response = "", status = "CONNECTING", error = "";
         private final CountDownLatch decision = new CountDownLatch(1);
@@ -27,7 +32,7 @@ public final class EmbeddedTlsProxy implements AutoCloseable {
     private final SSLContext upstream;
     private final String allowedHost;
     private final int allowedPort;
-    private final boolean pause;
+    private final boolean pause,pauseResponse;
     private final List<Flow> flows = new ArrayList<>();
     private final Set<Socket> sockets = ConcurrentHashMap.newKeySet();
     private final AtomicLong sequence = new AtomicLong();
@@ -39,9 +44,12 @@ public final class EmbeddedTlsProxy implements AutoCloseable {
         this(ca, host, port, pause, SSLContext.getDefault());
     }
     public EmbeddedTlsProxy(LabCertificateAuthority ca, String host, int port, boolean pause, SSLContext upstream) {
+        this(ca,host,port,pause,false,upstream);
+    }
+    public EmbeddedTlsProxy(LabCertificateAuthority ca,String host,int port,boolean pause,boolean pauseResponse,SSLContext upstream) {
         if (host == null || !host.matches("[A-Za-z0-9][A-Za-z0-9.-]{0,252}") || port < 1 || port > 65535)
             throw new IllegalArgumentException("Invalid lab host or port");
-        this.ca=ca; this.allowedHost=host.toLowerCase(Locale.ROOT); this.allowedPort=port; this.pause=pause; this.upstream=upstream;
+        this.ca=ca; this.allowedHost=host.toLowerCase(Locale.ROOT); this.allowedPort=port; this.pause=pause; this.pauseResponse=pauseResponse; this.upstream=upstream;
     }
     public synchronized int start(int port) throws IOException {
         if (running) return listener.getLocalPort();
@@ -65,7 +73,7 @@ public final class EmbeddedTlsProxy implements AutoCloseable {
         Flow flow = new Flow(sequence.incrementAndGet(), allowedHost);
         // Keep pending requests, bounded by the four active worker slots.
         while (flows.size() >= 32) {
-            int index=0; while(index<flows.size() && flows.get(index).status.equals("PAUSED")) index++;
+            int index=0; while(index<flows.size() && !java.util.Arrays.asList("COMPLETE","FAILED","DROPPED").contains(flows.get(index).status)) index++;
             if(index == flows.size()) break;
             flows.remove(index);
         }
@@ -81,6 +89,13 @@ public final class EmbeddedTlsProxy implements AutoCloseable {
             return;
         }
         throw new IllegalStateException("Request is no longer paused");
+    }
+    public void decideResponse(long id,String edited,boolean drop) throws IOException {
+        for(Flow flow:flows())if(flow.id==id){synchronized(flow){
+            if(!flow.status.equals("RESPONSE_PAUSED")||flow.responseDecision.getCount()==0)throw new IllegalStateException("Response is no longer paused");
+            if(edited!=null){if(flow.responseTemplate.isEmpty())throw new IllegalStateException(flow.responseEditError);ResponseEditor.normalize(edited);}
+            flow.responseEdited=edited;flow.responseDropped=drop;flow.status="RESPONSE_QUEUED";flow.responseDecision.countDown();return;
+        }}throw new IllegalStateException("Response is no longer available");
     }
     private void handle(Socket client) {
         Flow flow = null;
@@ -124,10 +139,23 @@ public final class EmbeddedTlsProxy implements AutoCloseable {
                             ByteArrayOutputStream sample=new ByteArrayOutputStream(); byte[] chunk=new byte[8192]; int count; long total=0;
                             while((count=remote.getInputStream().read(chunk))!=-1) {
                                 total+=count; if(total > 16L*1024*1024) throw new IOException("Response exceeds session limit");
-                                decrypted.getOutputStream().write(chunk,0,count);
-                                if(sample.size()<MAX_SAMPLE) sample.write(chunk,0,Math.min(count,MAX_SAMPLE-sample.size()));
+                                if(!pauseResponse)decrypted.getOutputStream().write(chunk,0,count);
+                                int sampleLimit=pauseResponse?MAX_BODY:MAX_SAMPLE;
+                                if(pauseResponse && total>MAX_BODY)throw new IOException("Paused response exceeds 1 MiB; disable response pause to stream larger responses");
+                                if(sample.size()<sampleLimit) sample.write(chunk,0,Math.min(count,sampleLimit-sample.size()));
                             }
-                            decrypted.getOutputStream().flush(); flow.responseTruncated=total>MAX_SAMPLE; flow.response=new String(sample.toByteArray(),StandardCharsets.UTF_8); flow.status="COMPLETE";
+                            flow.upstreamElapsed=(System.nanoTime()-flow.forwardingStarted)/1000000L;
+                            byte[] received=sample.toByteArray();
+                            if(pauseResponse){
+                                try{flow.responseTemplate=ResponseEditor.template(received);}catch(IOException unsupported){flow.responseEditError=unsupported.getMessage();}
+                                flow.response=new String(received,StandardCharsets.UTF_8);flow.status="RESPONSE_PAUSED";
+                                if(!flow.responseDecision.await(120,TimeUnit.SECONDS))throw new IOException("Paused response expired");
+                                if(flow.responseDropped){flow.status="DROPPED";reply(decrypted,403,"Response dropped in NEXVARY Lab");return;}
+                                if(flow.responseEdited!=null)received=ResponseEditor.normalize(flow.responseEdited);
+                                decrypted.getOutputStream().write(received);
+                            }
+                            decrypted.getOutputStream().flush();flow.responseTruncated=total>MAX_SAMPLE||received.length>MAX_SAMPLE;
+                            flow.response=new String(received,0,Math.min(received.length,MAX_SAMPLE),StandardCharsets.UTF_8);flow.status="COMPLETE";
                         }
                     } finally { sockets.remove(tcp); }
                 }
@@ -135,7 +163,7 @@ public final class EmbeddedTlsProxy implements AutoCloseable {
         } catch(Exception error) {
             if(flow!=null) { flow.error=error.getClass().getSimpleName()+": "+error.getMessage(); flow.status="FAILED"; }
         } finally {
-            if(flow!=null && flow.status.equals("COMPLETE"))CapturedTraffic.completed(captureGeneration,flow.request,flow.sent,flow.response,(System.nanoTime()-flow.forwardingStarted)/1000000L,flow.responseTruncated);
+            if(flow!=null && flow.status.equals("COMPLETE"))CapturedTraffic.completed(captureGeneration,flow.request,flow.sent,flow.response,flow.upstreamElapsed,flow.responseTruncated);
             sockets.remove(client);
         }
     }
@@ -169,7 +197,7 @@ public final class EmbeddedTlsProxy implements AutoCloseable {
     }
     @Override public synchronized void close() {
         running=false;
-        for(Flow flow:flows) {flow.dropped=true; flow.decision.countDown();}
+        for(Flow flow:flows) {flow.dropped=true; flow.responseDropped=true; flow.decision.countDown();flow.responseDecision.countDown();}
         try {if(listener!=null) listener.close();}catch(IOException ignored){}
         for(Socket socket:sockets) try{socket.close();}catch(IOException ignored){}
         sockets.clear(); workers.shutdownNow();

@@ -6,10 +6,10 @@ public final class CapturedTraffic {
     public record Exchange(String id,String original,String forwarded,String response,long elapsedMs,boolean prefixOnly,long timestamp,String source) { }
     private static final Deque<Exchange> exchanges=new ArrayDeque<>();
     private static final int LIMIT=32768;
-    private static long generation;
+    private static long generation,clearVersion;
     private static boolean accepting=true;
     public static synchronized long openSession(){accepting=true;return ++generation;}
-    public static synchronized void endSession(){accepting=false;generation++;exchanges.clear();}
+    public static synchronized void endSession(){accepting=false;generation++;clearVersion++;exchanges.clear();}
     private CapturedTraffic() { }
     private static String prefix(String value){return value.substring(0,Math.min(value.length(),LIMIT));}
     public static synchronized void completed(String original,String forwarded,String response,long elapsedMs,boolean truncated){
@@ -28,7 +28,8 @@ public final class CapturedTraffic {
         while(exchanges.size()>32)exchanges.removeFirst();
     }
     public static synchronized List<Exchange> all(){return new ArrayList<>(exchanges);}
-    public static synchronized void clear(){exchanges.clear();}
+    public static synchronized long clearVersion(){return clearVersion;}
+    public static synchronized void clear(){clearVersion++;exchanges.clear();}
     public static LabRequest request(Exchange exchange){
         String raw=exchange.forwarded();int boundary=raw.indexOf("\r\n\r\n");String head=boundary<0?raw:raw.substring(0,boundary);
         String[] lines=head.split("\r\n");String[] first=lines[0].split(" ",3);LabRequest request=new LabRequest();

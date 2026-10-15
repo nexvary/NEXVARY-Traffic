@@ -1,39 +1,27 @@
-# Integrated lab — 10.1.0
+# Integrated lab — 10.2.0 development
 
-This change replaces the PCAPdroid control screen with an in-process explicit HTTPS proxy. No PCAPdroid APK, Python runtime or remote capture service is required by this implementation.
+The Android APK contains its own native VPN transport, authenticated SOCKS5 gateway, HTTPS proxy and device-local certificate authority. No external capture APK, Python runtime or remote proxy is required. This version requires Android 10 (API 29) or later because of the native dependency's declared minimum API.
 
 ## Implemented
 
-- On-device CONNECT proxy at 127.0.0.1:8888, scoped to one configured upstream hostname and port.
-- Device-local CA whose RSA signing key stays in AndroidKeyStore and cannot be exported. Only the public CA certificate can be exported through Android's document picker.
-- Host-specific server certificates, upstream TLS certificate validation and HTTPS hostname verification.
-- HTTP/1.1 request capture, pause, edit, forward-original, forward-edited and drop. Response forwarding and a bounded response preview.
-- Bounded connections, queue, request/header size, flow history, certificate cache and response byte budget. Socket timeouts and a 120-second decision timeout.
-- Foreground service with an explicit Stop action. Exit revokes the login session, stops both app services, closes the local demo server and removes the app task.
-- Navigation tags and instrumented tests exercise all main navigation buttons, repeated tabs, back-stack behavior, HTTPS screen return, Arabic navigation, exit cancellation and confirmed exit.
+- User-selected training applications and Android VPN consent; TCP, UDP, IPv4 and IPv6 default routing. A mapped DNS resolver preserves destination hostnames for inspection routing. The NEXVARY UID is excluded from the allowlist; outbound sockets are also protected against routing loops.
+- HevSocks5Tunnel 2.19.0 is packaged inside the APK. Build preparation verifies the AAR and source archive SHA-256 values and bundles upstream and dependency license notices. See VPN_INTEGRATION.md.
+- HTTPS CONNECT inspection for one configured hostname and port, via the explicit proxy or the VPN's mapped DNS path. AndroidKeyStore retains the non-exportable CA signing key. Upstream certificate and hostname validation remain enabled.
+- HTTP/1.1 request pause, edit, forward-original and drop, with Content-Length and chunked upload framing. Chunked bodies are decoded and normalized to Content-Length before forwarding and editing. Request body limit: 1 MiB. Expect negotiation remains unsupported.
+- Optional response pause, forward-original, drop and editing of uncompressed UTF-8 text. Paused responses are limited to 1 MiB. Ordinary streaming responses retain a 16 MiB transaction limit and a 64 KiB preview. Compressed/binary responses can be forwarded unchanged or dropped; they are not offered for editing.
+- Completed text previews feed History, Evidence and analysis pages. Archive handoff retains 32 exchanges with 32,768-character previews; truncation is labeled. Request and response instructor pauses are excluded from upstream timing.
+- HAR 1.2 export/import with NEXVARY preview extensions. Export hides bodies, query values and sensitive headers by default; full preview export is explicit. Imported/restored records carry separate provenance tags and are conservatively marked as preview-only. Imports are offline analysis and never replay traffic.
+- Optional encrypted local session save/restore/delete. AES-GCM uses a non-exportable AndroidKeyStore key. Exit clears the temporary archive; explicitly saved archives remain until deleted. No automatic retention is enabled. Files are limited to 5 MiB and 32 imported exchanges.
+- Navigation and exit tests cover main pages, Back behavior, Arabic navigation, HTTPS return, VPN/archive return, cancel Exit and confirmed Exit. Confirmed Exit revokes authentication, shuts down services and listeners, closes the demo server and removes the task.
 
-## Protocol limits
+## Protocol and capture limits
 
-The target application must use the explicit proxy and trust the lab CA. This is not yet a full device VPN forwarding engine. Certificate pinning bypass, QUIC/HTTP3, HTTP/2, WebSocket upgrades and chunked request uploads are not implemented. Response bodies are forwarded as received; the text preview can be compressed or binary. A connection handles one HTTP/1.1 request and requests upstream connection close.
+VPN forwarding does not make TLS universally decryptable. Applications must trust the lab CA. Certificate pinning, custom TLS, application-level encryption and end-to-end encryption are not bypassed. Applications using hard-coded or cached IPs or encrypted DNS can bypass hostname inspection, while their connections are forwarded. QUIC and HTTP/2 can travel through the VPN but are not decoded by the HTTP/1.1 inspector; WebSocket upgrades are not inspected.
 
-The request editor is for UTF-8 text. Forward Original preserves the captured request body bytes, including binary content; Forward Edited encodes the edited body as UTF-8 and recalculates Content-Length. Ordinary routing fields and framing headers are normalized. No upstream trust-all or hostname-verification bypass is used in production.
-
-The service owns temporary in-memory flow history; stopping it discards those flows. Captured timings measure upstream connection, TLS and response time and exclude time spent paused by the instructor. Completed request/response text previews are handed to a bounded process-local archive and imported into History/Evidence and their analysis pages when navigating or returning to MainActivity. The archive retains at most 32 exchanges, each preview capped at 32,768 characters; truncated evidence is tagged PREFIX_ONLY. The archive survives stopping the capture service within the same process; explicit app exit clears it. The generic VPN service remains limited to the earlier closed lab subnet and is not the HTTPS engine.
+HAR stores metadata and explicitly labeled text previews, not byte-exact packet bodies. The current Packet Lab PCAP button still writes an educational sample; the native VPN transport does not yet expose full packet PCAP export. All protocols are not claimed to be decoded. Persistent archive restoration requires an unlocked session and explicit action. Larger streaming protocol support and physical-device verification remain outstanding.
 
 ## Verification
 
-CI builds the debug APK and runs lint. A separate Android 35 x86_64 emulator job executes real navigation and TLS integration tests. Read the run result for the specific commit; test source alone is not evidence that the tests passed.
+JVM suites include real authenticated TCP IPv4/IPv6 and UDP round-trips, shutdown, request framing, response editing, archive bounds and redaction. Android tests drive raw IPv4/IPv6 datagrams through the native engine, and a separate-UID fixture application generates TCP, UDP and mapped DNS through the actual Android VPN. Additional tests cover real TLS request modification, response edit/drop, production upstream-trust rejection, encrypted archive round-trip/tamper rejection and UI lifecycle.
 
-The TLS tests create a local HTTPS fixture, trust only its test CA, decrypt and modify a request, assert the upstream receives the modified body, and verify the response reaches the client. Additional tests check drop-before-upstream, out-of-scope rejection, CA persistence/non-exportable key and production rejection of an untrusted upstream certificate. The fixture's trust context is passed only to the test constructor; the production service uses SSLContext.getDefault().
-
-## Remaining before calling the application complete
-
-1. Implement and test full VPN packet forwarding and per-app routing, including IPv6 and DNS, before claiming all-app capture.
-2. Add HAR import/export and persistent retention controls beyond the bounded in-memory capture handoff.
-3. Add response editing and supported streaming protocols with protocol-specific tests.
-4. Validate CA setup and capture on physical lab devices and multiple Android versions.
-5. Expand UI visual QA, translation coverage and accessibility. Existing lint warnings must be reviewed.
-
-## Dependencies
-
-Certificate construction uses Bouncy Castle bcpkix-jdk18on 1.86 and its transitive components. Preserve their bundled license notices when distributing. No NetBare source is included: its repository-level license metadata and source-file headers differ, and its older Android implementation needs a separate compatibility review.
+Read the CI result for the exact commit. Test source alone is not a passing result. No physical-device run has been performed in this environment.

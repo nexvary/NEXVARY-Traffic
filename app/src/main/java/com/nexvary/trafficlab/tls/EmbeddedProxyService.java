@@ -10,6 +10,9 @@ public final class EmbeddedProxyService extends Service {
     public static volatile EmbeddedTlsProxy engine;
     public static volatile String state = "STOPPED";
     private int generation;
+    private static volatile EmbeddedProxyService instance;
+    public static void stopNow(){EmbeddedProxyService current=instance;if(current!=null)current.shutdown();}
+    private synchronized void shutdown(){generation++;if(engine!=null)engine.close();engine=null;}
     @Override public IBinder onBind(Intent intent) { return null; }
     @Override public synchronized int onStartCommand(Intent intent,int flags,int id) {
         if(intent==null || "stop".equals(intent.getAction()) || !AuthSession.isUnlocked()) {stopSelf();return START_NOT_STICKY;}
@@ -21,11 +24,11 @@ public final class EmbeddedProxyService extends Service {
         startForeground(8801,new Notification.Builder(this,"embedded_https").setSmallIcon(R.drawable.ic_shield)
                 .setContentTitle("NEXVARY HTTPS Lab").setContentText("Local proxy · 127.0.0.1:8888")
                 .setContentIntent(open).setOngoing(true).addAction(new Notification.Action.Builder(null,"Stop",stop).build()).build());
-        state="STARTING"; final int expected=++generation;
+        instance=this;state="STARTING"; final int expected=++generation;
         new Thread(() -> {
             EmbeddedTlsProxy candidate=null;
             try {
-                candidate=new EmbeddedTlsProxy(LabCertificateAuthority.open(this),intent.getStringExtra("host"),intent.getIntExtra("port",443),intent.getBooleanExtra("pause",true));
+                candidate=new EmbeddedTlsProxy(LabCertificateAuthority.open(this),intent.getStringExtra("host"),intent.getIntExtra("port",443),intent.getBooleanExtra("pause",true),intent.getBooleanExtra("pauseResponse",false),javax.net.ssl.SSLContext.getDefault());
                 synchronized(this) {
                     if(expected!=generation) {candidate.close();return;}
                     candidate.start(8888); engine=candidate; state="RUNNING";
@@ -38,8 +41,7 @@ public final class EmbeddedProxyService extends Service {
         return START_NOT_STICKY;
     }
     @Override public synchronized void onDestroy() {
-        generation++;
-        if(engine!=null) engine.close(); engine=null;
+        shutdown();instance=null;
         if(!state.startsWith("ERROR")) state="STOPPED";
         stopForeground(true); super.onDestroy();
     }

@@ -25,6 +25,7 @@ public final class LocalSocksGateway implements AutoCloseable {
     private final Semaphore slots=new Semaphore(24);
     private final ThreadPoolExecutor workers=new ThreadPoolExecutor(0,80,30,TimeUnit.SECONDS,new SynchronousQueue<>());
     private volatile boolean running;
+    public volatile String lastError="";
     private ServerSocket server;
     public LocalSocksGateway(Protector protector,String host,int port,int proxyPort,Supplier<Boolean> enabled) {
         this(protector,host,port,proxyPort,enabled,InetAddress::getByName);
@@ -44,7 +45,7 @@ public final class LocalSocksGateway implements AutoCloseable {
                 Socket client=server.accept();client.setSoTimeout(15000);
                 if(!slots.tryAcquire()){client.close();continue;}
                 resources.add(client);
-                try{workers.execute(()->{try{handle(client);}catch(Exception ignored){}finally{closeResource(client);slots.release();}});}
+                try{workers.execute(()->{try{handle(client);}catch(Exception error){lastError=error.getClass().getSimpleName()+": "+error.getMessage();}finally{closeResource(client);slots.release();}});}
                 catch(RejectedExecutionException full){closeResource(client);slots.release();}
             }catch(IOException closed){break;}
         },"nexvary-socks-accept");accept.setDaemon(true);accept.start();return server.getLocalPort();
@@ -80,7 +81,7 @@ public final class LocalSocksGateway implements AutoCloseable {
         String host=address(in,in.readUnsignedByte());int port=in.readUnsignedShort();
         if(command==3){udp(client,in,out);return;}
         if(command!=1){result(out,7,0);return;}
-        Socket remote=new Socket();resources.add(remote);
+        Socket remote=java.nio.channels.SocketChannel.open().socket();resources.add(remote);
         boolean established=false;
         try(remote){
             if(!protector.protect(remote))throw new IOException("Socket protection failed");
@@ -95,7 +96,7 @@ public final class LocalSocksGateway implements AutoCloseable {
             Future<?> upload=workers.submit(()->{try{copy(in,remote.getOutputStream());remote.shutdownOutput();}catch(IOException error){closeResource(remote);}});
             try{copy(remote.getInputStream(),out);try{client.shutdownOutput();}catch(IOException ignored){}}
             finally{upload.cancel(true);}
-        }catch(IOException error){try{if(!established)result(out,5,0);}catch(IOException ignored){}}
+        }catch(IOException error){lastError=error.getClass().getSimpleName()+": "+error.getMessage();try{if(!established)result(out,5,0);}catch(IOException ignored){}}
         finally{resources.remove(remote);}
     }
     private static String readHeaders(InputStream in)throws IOException {

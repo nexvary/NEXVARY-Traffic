@@ -64,6 +64,27 @@ public class EmbeddedHttpsTest extends InstrumentationTestCase {
             }
         }finally{threads.shutdownNow();}
     }
+    public void testPauseEditAndDropResponse() throws Exception {
+        for(boolean drop:new boolean[]{false,true}){
+            ExecutorService threads=Executors.newFixedThreadPool(2);
+            try(SSLServerSocket server=(SSLServerSocket)ca.serverContext("127.0.0.1").getServerSocketFactory().createServerSocket(0,10,InetAddress.getByName("127.0.0.1"));
+                EmbeddedTlsProxy proxy=new EmbeddedTlsProxy(ca,"127.0.0.1",server.getLocalPort(),false,true,trusted)){
+                server.setSoTimeout(10000);int target=server.getLocalPort();
+                Future<?> upstream=threads.submit(()->{try(SSLSocket socket=(SSLSocket)server.accept()){
+                    socket.setSoTimeout(10000);header(socket.getInputStream());
+                    socket.getOutputStream().write("HTTP/1.1 200 OK\r\nContent-Type: text/plain; charset=utf-8\r\nContent-Length: 9\r\nConnection: close\r\n\r\nprice:100".getBytes(StandardCharsets.UTF_8));socket.getOutputStream().flush();
+                }catch(Exception error){throw new RuntimeException(error);}});
+                int port=proxy.start(0);Future<String> reply=threads.submit(()->client(port,target,""));
+                EmbeddedTlsProxy.Flow selected=null;long until=System.currentTimeMillis()+8000;
+                while(selected==null&&System.currentTimeMillis()<until){for(EmbeddedTlsProxy.Flow flow:proxy.flows())if(flow.status.equals("RESPONSE_PAUSED"))selected=flow;if(selected==null)Thread.sleep(10);}
+                assertNotNull("No paused response",selected);assertTrue(selected.responseEditError,selected.responseTemplate.contains("price:100"));
+                proxy.decideResponse(selected.id,drop?null:selected.responseTemplate.replace("price:100","price:1"),drop);
+                String response=reply.get(10,TimeUnit.SECONDS);assertTrue(response,response.contains(drop?"403":"price:1"));
+                if(!drop){assertFalse(response.contains("price:100"));assertTrue(response.contains("Content-Length: 7"));}
+                upstream.get(10,TimeUnit.SECONDS);
+            }finally{threads.shutdownNow();}
+        }
+    }
     public void testDropDoesNotContactUpstream() throws Exception {
         ExecutorService threads=Executors.newSingleThreadExecutor();
         try(ServerSocket upstream=new ServerSocket(0,1,InetAddress.getByName("127.0.0.1"));EmbeddedTlsProxy proxy=new EmbeddedTlsProxy(ca,"127.0.0.1",upstream.getLocalPort(),true,trusted)){
