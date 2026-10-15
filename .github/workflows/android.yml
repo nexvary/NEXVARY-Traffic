@@ -38,6 +38,10 @@ jobs:
           if-no-files-found: warn
 
   device-tests:
+    strategy:
+      fail-fast: false
+      matrix:
+        api: [29, 35]
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
@@ -59,7 +63,7 @@ jobs:
       - name: Navigation, exit and real TLS integration tests
         uses: reactivecircus/android-emulator-runner@v2
         with:
-          api-level: 35
+          api-level: ${{ matrix.api }}
           target: google_apis
           arch: x86_64
           profile: pixel_2
@@ -69,7 +73,7 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: device-test-reports
+          name: device-test-reports-api-${{ matrix.api }}
           path: |
             app/build/reports/androidTests/
             app/build/outputs/androidTest-results/
