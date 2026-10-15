@@ -47,7 +47,10 @@ public class NavigationExitTest extends InstrumentationTestCase {
                 final Rect bounds=new Rect();getInstrumentation().runOnMainSync(()->{
                     View item=list.getChildAt(position-list.getFirstVisiblePosition());assertNotNull("Menu item absent "+tag,item);
                     assertTrue("Menu item not visible "+tag,item.getGlobalVisibleRect(bounds));screenBounds(item,bounds);
-                });touch(bounds);return;
+                });touch(bounds);
+                long until=SystemClock.uptimeMillis()+3000;
+                while(menu.isShowing()&&SystemClock.uptimeMillis()<until){Thread.sleep(20);getInstrumentation().waitForIdleSync();}
+                assertFalse("Menu selection did not complete "+tag,menu.isShowing());return;
             }catch(Exception error){throw new AssertionError(error);}
         }
         getInstrumentation().runOnMainSync(()->{View view=found[0];assertNotNull("Missing button "+tag,view);view.requestRectangleOnScreen(new Rect(0,0,view.getWidth(),view.getHeight()),true);});
