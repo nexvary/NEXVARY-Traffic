@@ -15,9 +15,8 @@ public final class TunPacketBridge implements Closeable {
     public volatile String error="";
     public TunPacketBridge(FileDescriptor tun,BoundedPcapCapture capture)throws Exception{
         this.tun=tun;this.capture=capture;
-        Os.socketpair(OsConstants.AF_UNIX,OsConstants.SOCK_DGRAM,0,bridge,engine);
+        Os.socketpair(OsConstants.AF_UNIX,OsConstants.SOCK_DGRAM|OsConstants.SOCK_NONBLOCK,0,bridge,engine);
         try{
-            Os.fcntlInt(bridge,OsConstants.F_SETFL,OsConstants.O_NONBLOCK);
             nativeFd=ParcelFileDescriptor.dup(engine);
         }catch(Exception error){Os.close(bridge);Os.close(engine);throw error;}
         outgoing=new Thread(()->pump(tun,bridge),"nexvary-pcap-out");

@@ -97,7 +97,7 @@ public class NavigationExitTest extends InstrumentationTestCase {
         click("nav:back");assertEquals("Dashboard",route());getInstrumentation().removeMonitor(monitor);
     }
     public void testCancelExitThenConfirmStopsEngineAndLocks() throws Exception {
-        getInstrumentation().runOnMainSync(()->activity.startForegroundService(new Intent(activity,EmbeddedProxyService.class).putExtra("host","localhost").putExtra("port",443).putExtra("recordPcap",true)));
+        getInstrumentation().runOnMainSync(()->activity.startForegroundService(new Intent(activity,EmbeddedProxyService.class).putExtra("host","localhost").putExtra("port",443)));
         long deadline=System.currentTimeMillis()+15000;
         while(EmbeddedProxyService.engine==null && System.currentTimeMillis()<deadline)Thread.sleep(50);
         assertNotNull("Embedded engine did not start: "+EmbeddedProxyService.state,EmbeddedProxyService.engine);

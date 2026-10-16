@@ -21,6 +21,7 @@ public final class VpnRoutingTest extends InstrumentationTestCase {
             long until=System.currentTimeMillis()+10000;
             while(!LabVpnService.state.equals("RUNNING")&&System.currentTimeMillis()<until)Thread.sleep(25);
             assertEquals(LabVpnService.state,"RUNNING",LabVpnService.state);
+            try{com.nexvary.trafficlab.vpn.VpnPacketCapture.export(context,new java.io.ByteArrayOutputStream());fail("Export of active recording must be rejected");}catch(java.io.IOException expected){}
             // Allow ConnectivityService to publish routes before the separate UID opens sockets.
             Thread.sleep(500);
             context.startActivity(new Intent().setClassName("com.nexvary.trafficfixture","com.nexvary.trafficfixture.TrafficFixtureActivity").addFlags(Intent.FLAG_ACTIVITY_NEW_TASK));
