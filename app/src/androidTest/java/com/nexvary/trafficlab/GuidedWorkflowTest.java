@@ -14,7 +14,14 @@ import java.util.concurrent.*;
 
 public final class GuidedWorkflowTest extends InstrumentationTestCase {
  private View find(View v,String tag){if(tag.equals(v.getTag()))return v;if(v instanceof ViewGroup){ViewGroup g=(ViewGroup)v;for(int i=0;i<g.getChildCount();i++){View found=find(g.getChildAt(i),tag);if(found!=null)return found;}}return null;}
- private void capture(String name)throws Exception{getInstrumentation().waitForIdleSync();android.graphics.Bitmap image=getInstrumentation().getUiAutomation().takeScreenshot();assertNotNull(image);File folder=getInstrumentation().getTargetContext().getExternalFilesDir("qa");if(!folder.exists())folder.mkdirs();try(OutputStream out=new FileOutputStream(new File(folder,name+".png"))){assertTrue(image.compress(android.graphics.Bitmap.CompressFormat.PNG,100,out));}finally{image.recycle();}}
+ private void capture(String name)throws Exception{
+  getInstrumentation().waitForIdleSync();android.graphics.Bitmap image=getInstrumentation().getUiAutomation().takeScreenshot();assertNotNull(image);
+  Context context=getInstrumentation().getTargetContext();ContentValues values=new ContentValues();values.put(android.provider.MediaStore.Images.Media.DISPLAY_NAME,name+".png");values.put(android.provider.MediaStore.Images.Media.MIME_TYPE,"image/png");values.put(android.provider.MediaStore.Images.Media.RELATIVE_PATH,"Pictures/NEXVARY-QA");values.put(android.provider.MediaStore.Images.Media.IS_PENDING,1);
+  android.net.Uri file=context.getContentResolver().insert(android.provider.MediaStore.Images.Media.EXTERNAL_CONTENT_URI,values);assertNotNull(file);
+  try(OutputStream out=context.getContentResolver().openOutputStream(file)){assertNotNull(out);assertTrue(image.compress(android.graphics.Bitmap.CompressFormat.PNG,100,out));}finally{image.recycle();}
+  ContentValues ready=new ContentValues();ready.put(android.provider.MediaStore.Images.Media.IS_PENDING,0);context.getContentResolver().update(file,ready,null,null);
+ }
+
  private void click(Activity a,String tag)throws Exception{getInstrumentation().runOnMainSync(()->{View v=find(a.getWindow().getDecorView(),tag);assertNotNull(tag,v);v.performClick();});getInstrumentation().waitForIdleSync();}
  public void testFiveStepsActualWebsiteProbeAndNavigation()throws Exception{
   Context context=getInstrumentation().getTargetContext();LocaleController.setLanguage(context,"ar");AuthSession.grant();LabProbe.stop();EmbeddedProxyService.stopNow();context.stopService(new Intent(context,EmbeddedProxyService.class));

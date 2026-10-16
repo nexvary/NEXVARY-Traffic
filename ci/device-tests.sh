@@ -14,6 +14,6 @@ adb shell appops set com.nexvary.trafficlab ACTIVATE_VPN allow
 adb push fixture-ca.der /data/local/tmp/nexvary-fixture-ca.der
 gradle --no-daemon :app:connectedDebugAndroidTest
 test_status=$?
-adb pull /sdcard/Android/data/com.nexvary.trafficlab/files/qa ui-screenshots || true
+adb pull /sdcard/Pictures/NEXVARY-QA ui-screenshots || true
 adb logcat -d > device-logcat.txt
 exit "$test_status"
