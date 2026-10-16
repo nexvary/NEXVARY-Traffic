@@ -108,7 +108,7 @@ public final class HttpsLabActivity extends Activity {
         if(state==null)return;state.setText(EmbeddedProxyService.state+" · 127.0.0.1:8888"+(EmbeddedProxyService.lesson==null?"":"\n"+EmbeddedProxyService.lesson.result));
         EmbeddedTlsProxy engine=EmbeddedProxyService.engine;
         if(engine!=lastEngine){lastEngine=engine;selected=-1;rendered=-1;responseRendered=-1;signature="";request.setText("");responseRequest.setText("");response.setText("");}
-        enable("tls:start",engine==null);enable("tls:stop",engine!=null);
+        boolean starting=EmbeddedProxyService.state.equals("STARTING");enable("tls:start",engine==null&&!starting);enable("tls:stop",engine!=null||starting);
         visible=engine==null?java.util.Collections.emptyList():engine.flows().stream().filter(flow->!flow.protocol.equals("HTTP/2 connection")||flow.status.equals("FAILED")).collect(java.util.stream.Collectors.toList());
         StringBuilder key=new StringBuilder();String[] labels=new String[visible.size()];int position=0;
         for(int i=0;i<visible.size();i++){EmbeddedTlsProxy.Flow flow=visible.get(i);labels[i]="#"+flow.id+" "+flow.host+" · "+flow.status;key.append(labels[i]);if(flow.id==selected)position=i;}

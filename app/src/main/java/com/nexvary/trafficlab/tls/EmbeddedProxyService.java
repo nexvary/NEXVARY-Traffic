@@ -17,7 +17,7 @@ public final class EmbeddedProxyService extends Service {
     @Override public IBinder onBind(Intent intent) { return null; }
     @Override public synchronized int onStartCommand(Intent intent,int flags,int id) {
         if(intent==null || "stop".equals(intent.getAction()) || !AuthSession.isUnlocked()) {stopSelf();return START_NOT_STICKY;}
-        if(engine!=null && engine.isRunning()) return START_NOT_STICKY;
+        if((engine!=null && engine.isRunning())||(instance==this&&state.equals("STARTING"))) return START_NOT_STICKY;
         NotificationManager manager=getSystemService(NotificationManager.class);
         manager.createNotificationChannel(new NotificationChannel("embedded_https","NEXVARY HTTPS Lab",NotificationManager.IMPORTANCE_LOW));
         PendingIntent open=PendingIntent.getActivity(this,0,new Intent(this,MainActivity.class),PendingIntent.FLAG_IMMUTABLE|PendingIntent.FLAG_UPDATE_CURRENT);
