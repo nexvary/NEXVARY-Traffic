@@ -97,12 +97,12 @@ public class NavigationExitTest extends InstrumentationTestCase {
         click("nav:back");assertEquals("Dashboard",route());getInstrumentation().removeMonitor(monitor);
     }
     public void testCancelExitThenConfirmStopsEngineAndLocks() throws Exception {
-        getInstrumentation().runOnMainSync(()->activity.startForegroundService(new Intent(activity,EmbeddedProxyService.class).putExtra("host","localhost").putExtra("port",443)));
+        getInstrumentation().runOnMainSync(()->activity.startForegroundService(new Intent(activity,EmbeddedProxyService.class).putExtra("host","localhost").putExtra("port",443).putExtra("recordPcap",true)));
         long deadline=System.currentTimeMillis()+15000;
         while(EmbeddedProxyService.engine==null && System.currentTimeMillis()<deadline)Thread.sleep(50);
         assertNotNull("Embedded engine did not start: "+EmbeddedProxyService.state,EmbeddedProxyService.engine);
         assertNull(android.net.VpnService.prepare(activity));
-        getInstrumentation().runOnMainSync(()->activity.startForegroundService(new Intent(activity,com.nexvary.trafficlab.vpn.LabVpnService.class).putExtra("packages",new String[]{"com.nexvary.trafficfixture"}).putExtra("host","localhost").putExtra("port",443)));
+        getInstrumentation().runOnMainSync(()->activity.startForegroundService(new Intent(activity,com.nexvary.trafficlab.vpn.LabVpnService.class).putExtra("packages",new String[]{"com.nexvary.trafficfixture"}).putExtra("host","localhost").putExtra("port",443).putExtra("recordPcap",true)));
         deadline=System.currentTimeMillis()+10000;
         while(!com.nexvary.trafficlab.vpn.LabVpnService.state.equals("RUNNING")&&System.currentTimeMillis()<deadline)Thread.sleep(25);
         assertEquals("RUNNING",com.nexvary.trafficlab.vpn.LabVpnService.state);
@@ -120,6 +120,7 @@ public class NavigationExitTest extends InstrumentationTestCase {
         assertNull("Exit left capture running",EmbeddedProxyService.engine);
         deadline=System.currentTimeMillis()+5000;
         while(!com.nexvary.trafficlab.vpn.LabVpnService.state.equals("STOPPED")&&System.currentTimeMillis()<deadline)Thread.sleep(25);
+        assertEquals("Exit left temporary packets","EMPTY",com.nexvary.trafficlab.vpn.VpnPacketCapture.status(activity));
         assertEquals("Exit left VPN active","STOPPED",com.nexvary.trafficlab.vpn.LabVpnService.state);assertFalse(hev.htproxy.TProxyService.TProxyIsRunning());
         try {assertEquals("Exit left an active TLS connection open",-1,active.getInputStream().read());}finally{active.close();}
         for(ActivityManager.AppTask task:activity.getSystemService(ActivityManager.class).getAppTasks())assertTrue("Exit left its task in recents",task.getTaskInfo().taskId!=exitedTask);
@@ -157,7 +158,7 @@ public class NavigationExitTest extends InstrumentationTestCase {
         click("nav:Packet Lab");
         Instrumentation.ActivityMonitor vpnMonitor=getInstrumentation().addMonitor(VpnLabActivity.class.getName(),null,false);
         click("packet:vpn");Activity vpn=getInstrumentation().waitForMonitorWithTimeout(vpnMonitor,5000);assertNotNull(vpn);
-        getInstrumentation().runOnMainSync(()->{View back=find(vpn.getWindow().getDecorView(),"vpn:back");assertNotNull(back);back.performClick();});
+        getInstrumentation().runOnMainSync(()->{assertNotNull(find(vpn.getWindow().getDecorView(),"vpn:record"));assertNotNull(find(vpn.getWindow().getDecorView(),"vpn:export"));find(vpn.getWindow().getDecorView(),"vpn:clear").performClick();View back=find(vpn.getWindow().getDecorView(),"vpn:back");assertNotNull(back);back.performClick();});
         getInstrumentation().waitForIdleSync();assertEquals("Packet Lab",route());getInstrumentation().removeMonitor(vpnMonitor);
         click("nav:back");assertEquals("History",route());
     }

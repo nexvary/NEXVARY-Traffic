@@ -1,4 +1,4 @@
-> Current development: **10.2.0 VPN lab** on `dev/foundation`. Read [the current implementation and limits](docs/INTEGRATED_LAB_STATUS.md). Android 10+ is required. Run `bash ci/prepare-native.sh` before Gradle to obtain and verify the bundled native transport. Historical reports below describe earlier versions.
+> Current development: **10.3.0 VPN lab** on `dev/foundation`. Read [the current implementation and limits](docs/INTEGRATED_LAB_STATUS.md). Android 10+ is required. Run `bash ci/prepare-native.sh` before Gradle to obtain and verify the bundled native transport. Historical reports below describe earlier versions.
 
 # NEXVARY Traffic Lab
 

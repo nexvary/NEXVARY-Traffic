@@ -377,6 +377,7 @@ public class MainActivity extends Activity {
         AuthSession.revoke();
         com.nexvary.trafficlab.tls.EmbeddedProxyService.stopNow();
         com.nexvary.trafficlab.vpn.LabVpnService.stopNow();
+        try{com.nexvary.trafficlab.vpn.VpnPacketCapture.clear(this);}catch(IOException error){android.util.Log.w("NEXVARY","Temporary capture deletion failed",error);}
         stopService(new Intent(this, com.nexvary.trafficlab.vpn.LabVpnService.class));
         stopService(new Intent(this, com.nexvary.trafficlab.tls.EmbeddedProxyService.class));
         server.stop();

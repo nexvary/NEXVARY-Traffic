@@ -14,8 +14,8 @@ android {
         testInstrumentationRunner 'androidx.test.runner.AndroidJUnitRunner'
         minSdk 29
         targetSdk 35
-        versionCode 105
-        versionName '10.2.0-vpn-lab'
+        versionCode 106
+        versionName '10.3.0-pcap-lab'
         buildConfigField 'String', 'RECOVERY_ENDPOINT', '"' + (project.findProperty('nexvaryRecoveryEndpoint') ?: '') + '"'
     }
 

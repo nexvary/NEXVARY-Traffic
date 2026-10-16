@@ -32,14 +32,16 @@ public final class NativeTunnelTest extends InstrumentationTestCase {
             FileDescriptor left=new FileDescriptor(),right=new FileDescriptor();
             Os.socketpair(OsConstants.AF_UNIX,OsConstants.SOCK_DGRAM,0,left,right);
             Os.setsockoptTimeval(right,OsConstants.SOL_SOCKET,OsConstants.SO_RCVTIMEO,StructTimeval.fromMillis(10000));
-            ParcelFileDescriptor nativeFd=ParcelFileDescriptor.dup(left);
+            File captureFile=new File(getInstrumentation().getTargetContext().getCacheDir(),"native-test.pcap");
+            com.nexvary.trafficlab.packet.BoundedPcapCapture capture=new com.nexvary.trafficlab.packet.BoundedPcapCapture(captureFile,1024*1024);
+            TunPacketBridge packetBridge=new TunPacketBridge(left,capture);packetBridge.start();
             LocalSocksGateway.Protector allow=new LocalSocksGateway.Protector(){public boolean protect(Socket s){return true;}public boolean protect(DatagramSocket s){return true;}};
             try(LocalSocksGateway gateway=new LocalSocksGateway(allow,null,443,8888,()->false,host->InetAddress.getByName("127.0.0.1"));
                 DatagramSocket echo=new DatagramSocket(new InetSocketAddress("127.0.0.1",0))){
                 echo.setSoTimeout(10000);int port=gateway.start();
                 try(FileOutputStream out=new FileOutputStream(config)){out.write(TunnelConfig.create(port,gateway.username(),gateway.password()).getBytes(StandardCharsets.UTF_8));}
                 Future<?> response=threads.submit(()->{try{DatagramPacket p=new DatagramPacket(new byte[200],200);echo.receive(p);echo.send(p);}catch(IOException e){throw new RuntimeException(e);}});
-                assertTrue(TProxyService.TProxyStartService(config.getAbsolutePath(),nativeFd.getFd()));
+                assertTrue(TProxyService.TProxyStartService(config.getAbsolutePath(),packetBridge.engineFd()));
                 Thread.sleep(200);assertTrue("native engine did not start",TProxyService.TProxyIsRunning());
                 byte[] expected=(ipv6?"native-ipv6":"native-ipv4").getBytes(StandardCharsets.US_ASCII);
                 byte[] packet=udp(ipv6,echo.getLocalPort(),expected);Os.write(right,packet,0,packet.length);
@@ -57,7 +59,16 @@ public final class NativeTunnelTest extends InstrumentationTestCase {
                 while((stats[0]==0||stats[2]==0)&&System.currentTimeMillis()<deadline){Thread.sleep(10);stats=TProxyService.TProxyGetStats();}
                 assertTrue("Native counters: "+java.util.Arrays.toString(stats),stats[0]>0&&stats[2]>0);
             }finally{
-                TProxyService.TProxyStopService();assertFalse(TProxyService.TProxyIsRunning());nativeFd.close();Os.close(left);Os.close(right);config.delete();threads.shutdownNow();
+                TProxyService.TProxyStopService();assertFalse(TProxyService.TProxyIsRunning());packetBridge.close();Os.close(left);Os.close(right);config.delete();threads.shutdownNow();
+                assertTrue("Bridge failed: "+packetBridge.error,packetBridge.error.isEmpty());
+                byte[] recorded=java.nio.file.Files.readAllBytes(captureFile.toPath());
+                java.nio.ByteBuffer pcap=java.nio.ByteBuffer.wrap(recorded).order(java.nio.ByteOrder.LITTLE_ENDIAN);pcap.position(24);boolean sent=false,received=false;
+                while(pcap.hasRemaining()){
+                    pcap.getInt();pcap.getInt();int length=pcap.getInt();assertEquals(length,pcap.getInt());byte[] ip=new byte[length];pcap.get(ip);
+                    assertEquals(ipv6?6:4,(ip[0]&255)>>>4);int h=ipv6?40:(ip[0]&15)*4;
+                    if(length>=h+8&&(ip[ipv6?6:9]&255)==17){if(word(ip,h)==32000)sent=true;if(word(ip,h+2)==32000)received=true;}
+                }
+                assertTrue("PCAP lost IPv"+(ipv6?6:4)+" UDP direction",sent&&received);captureFile.delete();
             }
         }
     }

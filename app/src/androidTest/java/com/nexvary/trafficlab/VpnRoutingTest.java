@@ -17,7 +17,7 @@ public final class VpnRoutingTest extends InstrumentationTestCase {
         try{
             assertNull("CI must grant VPN consent through appops",VpnService.prepare(context));
             getInstrumentation().runOnMainSync(()->context.startForegroundService(new Intent(context,LabVpnService.class)
-                    .putExtra("packages",new String[]{"com.nexvary.trafficfixture"}).putExtra("host","lab.invalid").putExtra("port",443)));
+                    .putExtra("packages",new String[]{"com.nexvary.trafficfixture"}).putExtra("host","lab.invalid").putExtra("port",443).putExtra("recordPcap",true)));
             long until=System.currentTimeMillis()+10000;
             while(!LabVpnService.state.equals("RUNNING")&&System.currentTimeMillis()<until)Thread.sleep(25);
             assertEquals(LabVpnService.state,"RUNNING",LabVpnService.state);
@@ -30,6 +30,27 @@ public final class VpnRoutingTest extends InstrumentationTestCase {
             context.startService(new Intent(context,LabVpnService.class).setAction("stop"));
             until=System.currentTimeMillis()+5000;while(!LabVpnService.state.equals("STOPPED")&&System.currentTimeMillis()<until)Thread.sleep(25);
             assertEquals("STOPPED",LabVpnService.state);assertFalse(hev.htproxy.TProxyService.TProxyIsRunning());
+            java.io.ByteArrayOutputStream output=new java.io.ByteArrayOutputStream();
+            com.nexvary.trafficlab.vpn.VpnPacketCapture.export(context,output);
+            java.nio.ByteBuffer pcap=java.nio.ByteBuffer.wrap(output.toByteArray()).order(java.nio.ByteOrder.LITTLE_ENDIAN);
+            assertEquals(0xa1b2c3d4,pcap.getInt());pcap.position(20);assertEquals(101,pcap.getInt());
+            int outgoing=0,incoming=0,tcp=0,udp=0,dns=0;
+            while(pcap.hasRemaining()){
+                assertTrue("Truncated PCAP record",pcap.remaining()>=16);int sec=pcap.getInt(),micros=pcap.getInt(),length=pcap.getInt(),original=pcap.getInt();
+                assertTrue(sec>0&&micros>=0&&micros<1000000);assertEquals(original,length);assertTrue(length>=20&&length<=pcap.remaining());
+                byte[] packet=new byte[length];pcap.get(packet);int version=(packet[0]&255)>>>4;
+                assertTrue("Not an IP packet",version==4||version==6);
+                if(version==4){
+                    int total=((packet[2]&255)<<8)|(packet[3]&255);assertEquals("Packet truncated",total,length);
+                    int protocol=packet[9]&255;if(protocol==6)tcp++;if(protocol==17)udp++;
+                    if(packet[12]==(byte)198&&packet[13]==18)outgoing++;if(packet[16]==(byte)198&&packet[17]==18)incoming++;
+                    int header=(packet[0]&15)*4;
+                    if(protocol==17&&length>=header+8&&(((packet[header]&255)<<8)|(packet[header+1]&255))==53)dns++;
+                }
+            }
+            assertTrue("Missing recorded directions/protocols: "+outgoing+"/"+incoming+"/"+tcp+"/"+udp+"/"+dns,outgoing>0&&incoming>0&&tcp>0&&udp>0&&dns>0);
+            com.nexvary.trafficlab.vpn.VpnPacketCapture.clear(context);
+            assertEquals("EMPTY",com.nexvary.trafficlab.vpn.VpnPacketCapture.status(context));
         }finally{
             context.unregisterReceiver(receiver);LabVpnService.stopNow();context.stopService(new Intent(context,LabVpnService.class));
             getInstrumentation().runOnMainSync(activity::finish);AuthSession.revoke();

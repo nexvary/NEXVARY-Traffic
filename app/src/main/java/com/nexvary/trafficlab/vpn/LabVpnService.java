@@ -18,12 +18,14 @@ public final class LabVpnService extends VpnService {
     public static String diagnostics(){LabVpnService current=instance;return current==null?state:state+" · "+(current.gateway==null?"":current.gateway.lastStage+" / UP "+current.gateway.uploaded.get()+" DOWN "+current.gateway.downloaded.get()+" / "+current.gateway.lastError);}
     private ParcelFileDescriptor tun;
     private LocalSocksGateway gateway;
+    private TunPacketBridge packetBridge;
     private final Handler handler=new Handler(Looper.getMainLooper());
     private volatile boolean active;
     private boolean nativeStarted;
     public static void stopNow(){LabVpnService current=instance;if(current!=null){current.shutdown();current.stopSelf();}}
     private final Runnable monitor=new Runnable(){public void run(){
         if(!active)return;
+        if(packetBridge!=null&&!packetBridge.isRunning()){state="ERROR: packet bridge stopped: "+packetBridge.error;shutdown();stopSelf();return;}
         if(!TProxyService.TProxyIsRunning()){state="ERROR: forwarding engine stopped";shutdown();stopSelf();return;}
         handler.postDelayed(this,1000);
     }};
@@ -56,7 +58,12 @@ public final class LabVpnService extends VpnService {
             File config=new File(getFilesDir(),"vpn-tunnel.yml");
             try(FileOutputStream out=new FileOutputStream(config)){out.write(TunnelConfig.create(port,gateway.username(),gateway.password()).getBytes(StandardCharsets.UTF_8));}
             tun=builder.establish();if(tun==null)throw new IOException("Android VPN permission is required");
-            nativeStarted=TProxyService.TProxyStartService(config.getAbsolutePath(),tun.getFd());
+            int engineFd=tun.getFd();
+            if(intent.getBooleanExtra("recordPcap",false)){
+                packetBridge=new TunPacketBridge(tun.getFileDescriptor(),VpnPacketCapture.begin(this));
+                engineFd=packetBridge.engineFd();packetBridge.start();
+            }
+            nativeStarted=TProxyService.TProxyStartService(config.getAbsolutePath(),engineFd);
             if(!nativeStarted)throw new IOException("Forwarding engine failed to start");
             active=true;state="RUNNING";handler.postDelayed(monitor,1000);
         }catch(Exception|LinkageError error){state="ERROR: "+error.getMessage();shutdown();stopSelf();}
@@ -68,6 +75,8 @@ public final class LabVpnService extends VpnService {
         boolean owner=instance==this;
         handler.removeCallbacks(monitor);active=false;
         if(nativeStarted){try{TProxyService.TProxyStopService();}catch(LinkageError ignored){}nativeStarted=false;}
+        if(packetBridge!=null){packetBridge.close();packetBridge=null;}
+        if(owner)VpnPacketCapture.stop();
         if(gateway!=null)gateway.close();gateway=null;
         try{if(tun!=null)tun.close();}catch(IOException ignored){}tun=null;
         if(owner){instance=null;new File(getFilesDir(),"vpn-tunnel.yml").delete();if(!state.startsWith("ERROR"))state="STOPPED";}

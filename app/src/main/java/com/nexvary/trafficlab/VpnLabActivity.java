@@ -8,16 +8,19 @@ import android.os.*;
 import android.view.View;
 import android.widget.*;
 import com.nexvary.trafficlab.vpn.LabVpnService;
+import com.nexvary.trafficlab.vpn.VpnPacketCapture;
+import java.io.OutputStream;
 import java.util.*;
 
 /** Explicit selection and Android VPN consent, with live native packet counters. */
 public final class VpnLabActivity extends Activity {
     private EditText packages,host,port;
     private TextView status;
+    private CheckBox recordPcap;
     private final Handler handler=new Handler(Looper.getMainLooper());
     private boolean resumed;
     private final Runnable poll=new Runnable(){public void run(){if(resumed){
-        long[] n=LabVpnService.stats();status.setText(LabVpnService.state+"\nTX "+n[0]+" packets / "+n[1]+" B · RX "+n[2]+" packets / "+n[3]+" B");
+        long[] n=LabVpnService.stats();status.setText(LabVpnService.state+"\nTX "+n[0]+" packets / "+n[1]+" B · RX "+n[2]+" packets / "+n[3]+" B\nPCAP: "+VpnPacketCapture.status(VpnLabActivity.this));
         handler.postDelayed(this,1000);
     }}};
     private String tr(String ar,String en){return "ar".equals(LocaleController.getLanguage(this))?ar:en;}
@@ -37,12 +40,16 @@ public final class VpnLabActivity extends Activity {
             "HTTPS inspection is optional: start the HTTPS engine and configure CA trust first. Only the configured lab hostname is inspected via lab DNS. Other connections pass through. Pinning and encrypted DNS can prevent inspection."),14);
         host=input(page,getIntent().getStringExtra("host")==null?"api.training.example":getIntent().getStringExtra("host"),"vpn:host");
         port=input(page,String.valueOf(getIntent().getIntExtra("port",443)),"vpn:port");port.setInputType(android.text.InputType.TYPE_CLASS_NUMBER);
+        recordPcap=new CheckBox(this);recordPcap.setText(tr("تسجيل حزم VPN في PCAP (حتى 32 MiB)","Record VPN packets to PCAP (up to 32 MiB)"));recordPcap.setTextColor(Color.WHITE);recordPcap.setTag("vpn:record");page.addView(recordPcap);
+        text(page,tr("يحفظ الحزم الكاملة للتطبيقات المختارة في الاتجاهين. يبقى TLS مشفرًا داخل PCAP. يبدأ كل تسجيل ملفًا جديدًا؛ أوقف VPN قبل التصدير أو الحذف. يُحذف الملف المؤقت عند الخروج من التطبيق.","Records complete packets for selected apps in both directions. TLS remains encrypted in PCAP. Each recording replaces the previous file. Stop VPN before export or delete. App Exit deletes the temporary capture."),14);
         status=text(page,LabVpnService.state,14);status.setTag("vpn:state");
         button(page,tr("تشغيل VPN للتطبيقات المحددة","Start VPN for selected apps"),"vpn:start",()->{
             try{selection();Intent consent=VpnService.prepare(this);if(consent!=null)startActivityForResult(consent,91);else start();}
             catch(Exception error){status.setText(error.getMessage());}
         });
         button(page,tr("إيقاف VPN","Stop VPN"),"vpn:stop",()->{LabVpnService.stopNow();stopService(new Intent(this,LabVpnService.class));});
+        button(page,tr("تصدير PCAP بعد الإيقاف","Export PCAP after stopping"),"vpn:export",()->startActivityForResult(new Intent(Intent.ACTION_CREATE_DOCUMENT).setType("application/vnd.tcpdump.pcap").addCategory(Intent.CATEGORY_OPENABLE).putExtra(Intent.EXTRA_TITLE,"NEXVARY-VPN.pcap"),92));
+        button(page,tr("حذف التسجيل المؤقت","Delete temporary capture"),"vpn:clear",()->{try{VpnPacketCapture.clear(this);Toast.makeText(this,tr("حُذف التسجيل","Capture deleted"),Toast.LENGTH_SHORT).show();}catch(Exception e){Toast.makeText(this,e.getMessage(),Toast.LENGTH_LONG).show();}});
         button(page,tr("رجوع","Back"),"vpn:back",this::finish);
     }
     private String[] selection(){
@@ -58,7 +65,7 @@ public final class VpnLabActivity extends Activity {
             String[] selected=selection();String h=host.getText().toString().trim();int p=Integer.parseInt(port.getText().toString());
             if(!h.matches("[A-Za-z0-9][A-Za-z0-9.-]{0,252}")||p<1||p>65535)throw new IllegalArgumentException("Invalid lab host / port");
             getPreferences(0).edit().putString("packages",String.join(",",selected)).apply();
-            startForegroundService(new Intent(this,LabVpnService.class).putExtra("packages",selected).putExtra("host",h).putExtra("port",p));
+            startForegroundService(new Intent(this,LabVpnService.class).putExtra("packages",selected).putExtra("host",h).putExtra("port",p).putExtra("recordPcap",recordPcap.isChecked()));
         }catch(Exception error){status.setText(error.getMessage());}
     }
     private void choose(EditText field){
@@ -74,7 +81,10 @@ public final class VpnLabActivity extends Activity {
     private TextView text(LinearLayout p,String s,int size){TextView v=new TextView(this);v.setText(s);v.setTextSize(size);v.setTextColor(Color.WHITE);v.setPadding(0,12,0,16);p.addView(v);return v;}
     private EditText input(LinearLayout p,String s,String tag){EditText v=new EditText(this);v.setText(s);v.setTextColor(Color.WHITE);v.setHintTextColor(Color.LTGRAY);v.setSingleLine(true);v.setTag(tag);p.addView(v);return v;}
     private void button(LinearLayout p,String s,String tag,Runnable action){Button b=new Button(this);b.setText(s);b.setAllCaps(false);b.setTag(tag);b.setOnClickListener(v->action.run());p.addView(b);}
-    @Override protected void onActivityResult(int code,int result,Intent data){super.onActivityResult(code,result,data);if(code==91){if(result==RESULT_OK)start();else status.setText(tr("لم يُمنح إذن VPN","VPN permission was not granted"));}}
+    @Override protected void onActivityResult(int code,int result,Intent data){super.onActivityResult(code,result,data);if(code==92&&result==RESULT_OK&&data!=null&&data.getData()!=null){
+        try(OutputStream out=getContentResolver().openOutputStream(data.getData(),"wt")){if(out==null)throw new java.io.IOException("Cannot open PCAP destination");VpnPacketCapture.export(this,out);Toast.makeText(this,tr("تم تصدير PCAP","PCAP exported"),Toast.LENGTH_LONG).show();}
+        catch(Exception e){Toast.makeText(this,e.getMessage(),Toast.LENGTH_LONG).show();}
+    }if(code==91){if(result==RESULT_OK)start();else status.setText(tr("لم يُمنح إذن VPN","VPN permission was not granted"));}}
     @Override protected void onResume(){super.onResume();resumed=true;handler.post(poll);}
     @Override protected void onPause(){resumed=false;handler.removeCallbacks(poll);super.onPause();}
 }
