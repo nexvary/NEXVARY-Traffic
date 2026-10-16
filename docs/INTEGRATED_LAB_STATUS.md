@@ -27,3 +27,12 @@ HAR stores metadata and explicitly labeled text previews, not byte-exact packet 
 JVM suites include PCAP format, exact packet bytes, timestamps, record boundaries, replacement and size limits. Android native IPv4/IPv6 tests now traverse the capture bridge and verify recorded UDP in both directions. The separate-UID VPN test parses the exported PCAP and checks TCP, UDP, DNS and both directions; Exit checks deletion. JVM suites also include real authenticated TCP IPv4/IPv6 and UDP round-trips, shutdown, request framing, response editing, archive bounds and redaction. Android tests drive raw IPv4/IPv6 datagrams through the native engine, and a separate-UID fixture application generates TCP, UDP and mapped DNS through the actual Android VPN. Another separate-app test routes HTTPS through VPN, edits a request and checks the verified local TLS upstream result. Additional tests cover real TLS request modification, response edit/drop, production upstream-trust rejection, encrypted archive round-trip/tamper rejection and UI lifecycle.
 
 Read the CI result for the exact commit. Test source alone is not a passing result. No physical-device run has been performed in this environment.
+
+### Verified 10.3.0 build
+
+Application/test source commit `c0e7defe4497f1b60936f850bb073a29cd5da995` passed 19 JVM test programs, debug APK assembly and Android lint, plus all 19 instrumented methods on each of API 29 and API 35 (38 emulator executions, zero failed or skipped). This includes the VPN screen writing and reading a real content-provider PCAP destination.
+
+- [Verified CI and logs](https://github.com/nexvary/NEXVARY-Traffic/actions/runs/38865287593)
+- [Debug APK and lint reports](https://github.com/nexvary/NEXVARY-Traffic/actions/runs/38865287593/artifacts/12030673406)
+
+Documentation-only updates may follow that source commit. The APK is versionCode 106 / versionName 10.3.0-pcap-lab, intended for testing. Physical-device verification and HTTP/2, QUIC and WebSocket inspection remain outstanding.
