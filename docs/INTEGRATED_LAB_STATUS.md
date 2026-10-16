@@ -42,3 +42,7 @@ Application/test source commit `c0e7defe4497f1b60936f850bb073a29cd5da995` passed
 - [Debug APK and lint reports](https://github.com/nexvary/NEXVARY-Traffic/actions/runs/38865287593/artifacts/12030673406)
 
 Documentation-only updates may follow that source commit. The APK is versionCode 106 / versionName 10.3.0-pcap-lab, intended for testing. That result covers 10.3.0 only. For 10.4.0, consult the exact commit CI. Physical-device verification and full QUIC/HTTP3 decryption remain outstanding.
+
+## Authentication verification boundary
+
+Registration, mismatched-password rejection, incorrect-code rejection, unlock, lock and recovery dialog cancellation are exercised through Android UI controls. The default debug build has no `nexvaryRecoveryEndpoint`; email recovery therefore reports that it is unconfigured and cannot reset a password without verification. A test checks that those controls fail closed. Actual email delivery and server-side recovery are not claimed to be configured or tested.

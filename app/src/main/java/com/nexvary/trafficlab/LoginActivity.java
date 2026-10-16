@@ -12,6 +12,7 @@ import java.util.Locale;
 
 public class LoginActivity extends Activity {
     private final int bg=Color.rgb(4,16,12), panel=Color.rgb(8,29,22), gold=Color.rgb(255,209,102), electric=Color.rgb(57,255,136), emerald=Color.rgb(0,200,151), silver=Color.rgb(218,226,222), danger=Color.rgb(255,88,111);
+    private AlertDialog recoveryDialog;
     private int failedAttempts=0; private long lockedUntil=0;
 
     @Override protected void attachBaseContext(Context base){ super.attachBaseContext(LocaleController.wrap(base)); }
@@ -32,22 +33,23 @@ public class LoginActivity extends Activity {
         LinearLayout root=base(); LinearLayout card=card();
         card.addView(t(getString(R.string.create_passcode_title),22,gold,true)); card.addView(t(getString(R.string.create_passcode_desc),14,silver,false));
         EditText p1=input(getString(R.string.passcode),true); EditText p2=input(getString(R.string.confirm_passcode),true); EditText email=input(getString(R.string.recovery_email),false);
-        email.setInputType(InputType.TYPE_CLASS_TEXT|InputType.TYPE_TEXT_VARIATION_EMAIL_ADDRESS); card.addView(p1); card.addView(p2); card.addView(email);
-        Button create=button(getString(R.string.create_secure_access),electric,R.drawable.ic_lock); card.addView(create);
-        TextView msg=t("",13,danger,false); card.addView(msg);
+        p1.setTag("login:setup-password");p2.setTag("login:setup-confirm");email.setTag("login:setup-email");email.setInputType(InputType.TYPE_CLASS_TEXT|InputType.TYPE_TEXT_VARIATION_EMAIL_ADDRESS); card.addView(p1); card.addView(p2); card.addView(email);
+        Button create=button(getString(R.string.create_secure_access),electric,R.drawable.ic_lock); create.setTag("login:create");card.addView(create);
+        TextView msg=t("",13,danger,false);msg.setTag("login:message"); card.addView(msg);
         create.setOnClickListener(v->{String a=p1.getText().toString(),b=p2.getText().toString(),e=email.getText().toString(); if(!a.equals(b)){msg.setText(getString(R.string.passcodes_not_match));return;} if(!AuthManager.setup(this,a,e)){msg.setText(getString(R.string.passcode_requirements));return;} showLogin();});
         root.addView(card,new LinearLayout.LayoutParams(-1,-2)); setContentView(root);
     }
     private void showLogin(){
         LinearLayout root=base(); LinearLayout card=card(); card.addView(t(getString(R.string.unlock_title),22,gold,true)); card.addView(t(getString(R.string.unlock_desc),14,silver,false));
-        EditText pass=input(getString(R.string.passcode),true); card.addView(pass); Button unlock=button(getString(R.string.unlock),electric,R.drawable.ic_shield); card.addView(unlock);
-        Button forgot=button(getString(R.string.forgot_passcode),gold,R.drawable.ic_language); card.addView(forgot); TextView msg=t("",13,danger,false); card.addView(msg);
+        EditText pass=input(getString(R.string.passcode),true);pass.setTag("login:password"); card.addView(pass); Button unlock=button(getString(R.string.unlock),electric,R.drawable.ic_shield); unlock.setTag("login:unlock");card.addView(unlock);
+        Button forgot=button(getString(R.string.forgot_passcode),gold,R.drawable.ic_language); forgot.setTag("login:forgot");card.addView(forgot); TextView msg=t("",13,danger,false);msg.setTag("login:message"); card.addView(msg);
         unlock.setOnClickListener(v->{long now=System.currentTimeMillis(); if(now<lockedUntil){msg.setText(getString(R.string.try_again_later));return;} if(AuthManager.verify(this,pass.getText().toString())){failedAttempts=0; AuthSession.grant(); startActivity(new Intent(this,MainActivity.class)); pass.setText(""); finish();} else {failedAttempts++; msg.setText(getString(R.string.invalid_passcode)); if(failedAttempts>=5){lockedUntil=now+30_000;failedAttempts=0;msg.setText(getString(R.string.too_many_attempts));}}});
         forgot.setOnClickListener(v->showRecoveryDialog()); root.addView(card,new LinearLayout.LayoutParams(-1,-2)); setContentView(root);
     }
     private void showRecoveryDialog(){
-        LinearLayout box=new LinearLayout(this); box.setOrientation(LinearLayout.VERTICAL); box.setPadding(dp(14),dp(6),dp(14),0); EditText email=input(getString(R.string.recovery_email),false); EditText code=input(getString(R.string.recovery_code),false); EditText np=input(getString(R.string.new_passcode),true); box.addView(email); box.addView(code); box.addView(np);
+        LinearLayout box=new LinearLayout(this); box.setOrientation(LinearLayout.VERTICAL); box.setPadding(dp(14),dp(6),dp(14),0); EditText email=input(getString(R.string.recovery_email),false); EditText code=input(getString(R.string.recovery_code),false); EditText np=input(getString(R.string.new_passcode),true); email.setTag("recovery:email");code.setTag("recovery:code");np.setTag("recovery:password");box.addView(email); box.addView(code); box.addView(np);
         AlertDialog d=new AlertDialog.Builder(this).setTitle(getString(R.string.email_recovery)).setView(box).setNegativeButton(getString(R.string.cancel),null).setNeutralButton(getString(R.string.send_code),null).setPositiveButton(getString(R.string.reset_passcode),null).create();
+        recoveryDialog=d;
         d.setOnShowListener(x->{d.getButton(AlertDialog.BUTTON_NEUTRAL).setOnClickListener(v->{String e=email.getText().toString(); if(!AuthManager.emailMatches(this,e)){toast(R.string.recovery_email_mismatch);return;} if(!RecoveryClient.isConfigured()){toast(R.string.recovery_service_not_configured);return;} new Thread(()->{RecoveryClient.Result r=RecoveryClient.request(e);runOnUiThread(()->toast(r.ok()?R.string.recovery_code_sent:R.string.recovery_failed));}).start();});
             d.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener(v->{String e=email.getText().toString(),c=code.getText().toString(),n=np.getText().toString(); if(!AuthManager.emailMatches(this,e)){toast(R.string.recovery_email_mismatch);return;} if(!AuthManager.isStrongEnough(n)){toast(R.string.passcode_requirements);return;} if(!RecoveryClient.isConfigured()){toast(R.string.recovery_service_not_configured);return;} new Thread(()->{RecoveryClient.Result r=RecoveryClient.verify(e,c);runOnUiThread(()->{if(r.ok()&&AuthManager.resetPassword(this,n)){toast(R.string.passcode_reset_done);d.dismiss();}else toast(R.string.recovery_failed);});}).start();});}); d.show();
     }

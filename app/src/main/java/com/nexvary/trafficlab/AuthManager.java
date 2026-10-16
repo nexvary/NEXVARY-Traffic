@@ -20,7 +20,7 @@ public final class AuthManager {
 
     public static boolean isConfigured(Context c) {
         SharedPreferences p = prefs(c);
-        return p.contains(K_HASH) && p.contains(K_SALT) && !p.getString(K_EMAIL, "").isBlank();
+        return p.contains(K_HASH) && p.contains(K_SALT) && !p.getString(K_EMAIL, "").trim().isEmpty();
     }
 
     public static String recoveryEmail(Context c) {
@@ -57,7 +57,7 @@ public final class AuthManager {
 
     public static boolean emailMatches(Context c, String email) {
         String saved = recoveryEmail(c);
-        return email != null && !saved.isBlank() && MessageDigest.isEqual(
+        return email != null && !saved.trim().isEmpty() && MessageDigest.isEqual(
                 saved.getBytes(StandardCharsets.UTF_8), AuthCrypto.normalizeEmail(email).getBytes(StandardCharsets.UTF_8));
     }
 
