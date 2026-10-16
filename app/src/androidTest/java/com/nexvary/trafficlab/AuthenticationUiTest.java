@@ -23,7 +23,7 @@ public final class AuthenticationUiTest extends InstrumentationTestCase {
    click(locked,"login:forgot");Field field=LoginActivity.class.getDeclaredField("recoveryDialog");field.setAccessible(true);AlertDialog dialog=(AlertDialog)field.get(locked);assertTrue(dialog.isShowing());
    getInstrumentation().runOnMainSync(()->{((EditText)find(dialog.getWindow().getDecorView(),"recovery:email")).setText("training@example.com");((EditText)find(dialog.getWindow().getDecorView(),"recovery:code")).setText("not-a-verified-code");((EditText)find(dialog.getWindow().getDecorView(),"recovery:password")).setText("Replacement#5678");dialog.getButton(AlertDialog.BUTTON_NEUTRAL).performClick();dialog.getButton(AlertDialog.BUTTON_POSITIVE).performClick();});
    assertTrue("Unconfigured recovery changed the passcode",AuthManager.verify(context,"Nexvary-Lab#1234"));assertFalse(AuthSession.isUnlocked());
-   getInstrumentation().runOnMainSync(()->dialog.getButton(AlertDialog.BUTTON_NEGATIVE).performClick());assertFalse(dialog.isShowing());
+   getInstrumentation().runOnMainSync(()->dialog.getButton(AlertDialog.BUTTON_NEGATIVE).performClick());getInstrumentation().waitForIdleSync();assertFalse(dialog.isShowing());
   }finally{if(main!=null){Activity close=main;getInstrumentation().runOnMainSync(close::finish);}if(locked!=null){Activity close=locked;getInstrumentation().runOnMainSync(close::finish);}getInstrumentation().runOnMainSync(first::finish);context.getSharedPreferences("nexvary_auth",0).edit().clear().commit();AuthSession.revoke();}
  }
 }
