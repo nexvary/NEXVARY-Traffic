@@ -28,7 +28,15 @@ public class NavigationExitTest extends InstrumentationTestCase {
     private String route() throws Exception {return (String)field("currentScreen");}
     private View find(View root,String tag){if(tag.equals(root.getTag()))return root;if(root instanceof ViewGroup){ViewGroup g=(ViewGroup)root;for(int i=0;i<g.getChildCount();i++){View v=find(g.getChildAt(i),tag);if(v!=null)return v;}}return null;}
     private void screenBounds(View view,Rect bounds){int[] location=new int[2];view.getLocationOnScreen(location);bounds.set(location[0],location[1],location[0]+view.getWidth(),location[1]+view.getHeight());}
-    private void touch(Rect bounds){
+    private void touch(Rect bounds,View root){
+        // RESUMED does not imply that Android 15 has removed ActivityRecordInputSink.
+        long deadline=SystemClock.uptimeMillis()+5000;final boolean[] focused={false};
+        do{getInstrumentation().runOnMainSync(()->focused[0]=root.hasWindowFocus()&&root.isShown());if(!focused[0])SystemClock.sleep(20);}while(!focused[0]&&SystemClock.uptimeMillis()<deadline);
+        assertTrue("Target window did not gain input focus",focused[0]);
+        java.util.concurrent.CountDownLatch rendered=new java.util.concurrent.CountDownLatch(1);
+        getInstrumentation().runOnMainSync(()->root.postOnAnimation(()->root.postOnAnimation(rendered::countDown)));
+        try{assertTrue("Target window did not render",rendered.await(3,java.util.concurrent.TimeUnit.SECONDS));}catch(InterruptedException error){Thread.currentThread().interrupt();throw new AssertionError(error);}
+
         long now=SystemClock.uptimeMillis();
         MotionEvent down=MotionEvent.obtain(now,now,MotionEvent.ACTION_DOWN,bounds.centerX(),bounds.centerY(),0);
         MotionEvent up=MotionEvent.obtain(now,now+50,MotionEvent.ACTION_UP,bounds.centerX(),bounds.centerY(),0);
@@ -48,7 +56,7 @@ public class NavigationExitTest extends InstrumentationTestCase {
                 final Rect bounds=new Rect();getInstrumentation().runOnMainSync(()->{
                     View item=list.getChildAt(position-list.getFirstVisiblePosition());assertNotNull("Menu item absent "+tag,item);
                     assertTrue("Menu item not visible "+tag,item.getGlobalVisibleRect(bounds));screenBounds(item,bounds);
-                });touch(bounds);
+                });touch(bounds,list.getRootView());
                 long until=SystemClock.uptimeMillis()+3000;
                 while(menu.isShowing()&&SystemClock.uptimeMillis()<until){Thread.sleep(20);getInstrumentation().waitForIdleSync();}
                 assertFalse("Menu selection did not complete "+tag,menu.isShowing());return;
@@ -56,7 +64,7 @@ public class NavigationExitTest extends InstrumentationTestCase {
         }
         getInstrumentation().runOnMainSync(()->{View view=found[0];assertNotNull("Missing button "+tag,view);view.requestRectangleOnScreen(new Rect(0,0,view.getWidth(),view.getHeight()),true);});
         getInstrumentation().waitForIdleSync();final Rect bounds=new Rect();
-        getInstrumentation().runOnMainSync(()->{assertTrue("Button not visible "+tag,found[0].getGlobalVisibleRect(bounds));screenBounds(found[0],bounds);});touch(bounds);
+        getInstrumentation().runOnMainSync(()->{assertTrue("Button not visible "+tag,found[0].getGlobalVisibleRect(bounds));screenBounds(found[0],bounds);});touch(bounds,found[0].getRootView());
     }
     private void collect(View root,Set<String> tags){Object tag=root.getTag();if(tag instanceof String && ((String)tag).startsWith("nav:") && !tag.equals("nav:back"))tags.add((String)tag);if(root instanceof ViewGroup){ViewGroup g=(ViewGroup)root;for(int i=0;i<g.getChildCount();i++)collect(g.getChildAt(i),tags);}}
     private void assertButtonsWired(View view){if(view instanceof android.widget.Button&&view.isEnabled())assertTrue("Button without action: "+((android.widget.Button)view).getText(),view.hasOnClickListeners());if(view instanceof ViewGroup){ViewGroup group=(ViewGroup)view;for(int i=0;i<group.getChildCount();i++)assertButtonsWired(group.getChildAt(i));}}
