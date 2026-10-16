@@ -1,0 +1,9 @@
+import com.nexvary.trafficlab.core.*; import java.nio.charset.StandardCharsets; import java.util.*;
+public class Stage41To50Test { static void ok(boolean v,String m){if(!v)throw new AssertionError(m);} public static void main(String[] a){
+ LabRequest r=new LabRequest();r.method="POST";r.path="/api/order/42";r.headers.put("Host","lab.nexvary.local");r.headers.put("Authorization","Bearer demo");r.body="{\"email\":\"student@example.test\",\"price\":1}"; LabResponse p=new LabResponse();p.statusCode=200;p.elapsedMs=18;p.body="{}"; Finding f=new Finding("HIGH","Client price trusted","demo");HistoryEntry e=new HistoryEntry(1,1000,r,p,List.of(f));
+ ok(ProtocolAutoDetect.detect("GET / HTTP/1.1\r\n".getBytes(StandardCharsets.ISO_8859_1),80).protocol().contains("HTTP"),"protocol");
+ ok(RequestWaterfall.build(List.of(e)).size()==1,"waterfall"); ok(DependencyMap.build(List.of(e),"lab.nexvary.local").size()==1,"dependency");
+ ok(!SecurityRegressionGate.compare(List.of(),List.of(f)).pass(),"gate"); ok(ApiBehaviorBaseline.learn(List.of(e)).get(0).route().contains("/{id}"),"baseline");
+ ok(SensitiveDataJourney.trace(List.of(e)).get(0).categories().contains("email"),"journey"); var tls=TlsPostureDashboard.summarize(List.of(new TlsPostureDashboard.Endpoint("lab","TLSv1.3","TLS_AES_128_GCM_SHA256",30,true,List.of())));ok(tls.healthy()==1,"tls");
+ ok(DemoScenarioComposer.standard().size()==6,"composer");ok(FindingRemediationGraph.build(List.of(f)).size()==1,"remediation");ok(LectureCockpit.snapshot(List.of(e)).sessions()==1,"cockpit");
+ System.out.println("STAGES_41_TO_50_OK"); System.out.println("protocol="+ProtocolAutoDetect.detect("GET / HTTP/1.1\r\n".getBytes(StandardCharsets.ISO_8859_1),80).protocol()+" baseline="+ApiBehaviorBaseline.learn(List.of(e)).get(0).route()+" cockpit="+LectureCockpit.snapshot(List.of(e)).status()); }}

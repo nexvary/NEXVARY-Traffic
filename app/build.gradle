@@ -1,0 +1,54 @@
+plugins {
+    id 'com.android.application'
+}
+
+android {
+    namespace 'com.nexvary.trafficlab'
+    compileSdk 35
+    useLibrary 'android.test.runner'
+    useLibrary 'android.test.base'
+    useLibrary 'android.test.mock'
+
+    defaultConfig {
+        applicationId 'com.nexvary.trafficlab'
+        testInstrumentationRunner 'androidx.test.runner.AndroidJUnitRunner'
+        minSdk 29
+        targetSdk 35
+        versionCode 107
+        versionName '10.4.0-guided-lab'
+        buildConfigField 'String', 'RECOVERY_ENDPOINT', '"' + (project.findProperty('nexvaryRecoveryEndpoint') ?: '') + '"'
+    }
+
+    packaging {
+        resources {
+            excludes += "META-INF/versions/9/OSGI-INF/MANIFEST.MF"
+            excludes += "META-INF/INDEX.LIST"
+            merges += "META-INF/LICENSE.md"
+            merges += "META-INF/LICENSE.txt"
+            merges += "META-INF/NOTICE.txt"
+            merges += "META-INF/io.netty.versions.properties"
+        }
+    }
+    buildFeatures {
+        buildConfig true
+    }
+
+    buildTypes {
+        release {
+            minifyEnabled false
+            proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
+        }
+    }
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_17
+        targetCompatibility JavaVersion.VERSION_17
+    }
+}
+
+// Local certificate generation; no external capture application.
+dependencies {
+    implementation files("libs/hev-socks5-tunnel-2.19.0.aar")
+    implementation "io.netty:netty-codec-http2:4.1.139.Final"
+    implementation "org.bouncycastle:bcpkix-jdk18on:1.86"
+    androidTestImplementation "androidx.test:runner:1.7.0"
+}

@@ -1,0 +1,82 @@
+name: Android verification
+on:
+  push:
+    branches: [main, dev/foundation]
+  pull_request:
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - name: JVM regression suite
+        run: bash verify_jvm.sh
+      - uses: android-actions/setup-android@v3
+        with:
+          packages: platform-tools platforms;android-35 build-tools;35.0.0
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.9'
+      - name: Prepare pinned native VPN engine
+        run: bash ci/prepare-native.sh
+      - name: Android build and lint
+        run: gradle --no-daemon assembleDebug lintDebug
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: traffic-lab-debug-and-reports
+          path: |
+            app/build/outputs/apk/debug/*.apk
+            app/build/reports/lint-results-debug.*
+          if-no-files-found: warn
+
+  device-tests:
+    strategy:
+      fail-fast: false
+      matrix:
+        api: [29, 35]
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: android-actions/setup-android@v3
+        with:
+          packages: platform-tools platforms;android-35 build-tools;35.0.0
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.9'
+      - name: Prepare pinned native VPN engine
+        run: bash ci/prepare-native.sh
+      - name: Enable emulator acceleration
+        run: sudo chmod 666 /dev/kvm
+      - name: Navigation, exit and real TLS integration tests
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: ${{ matrix.api }}
+          target: google_apis
+          arch: x86_64
+          profile: pixel_2
+          disable-animations: true
+          script: bash ci/device-tests.sh
+      - name: Collect device reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: device-test-reports-api-${{ matrix.api }}
+          path: |
+            app/build/reports/androidTests/
+            app/build/outputs/androidTest-results/
+            device-logcat.txt
+            fixture-network.log
+            ui-screenshots/

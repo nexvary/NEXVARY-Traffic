@@ -1,9 +1,46 @@
+> Current development: **10.4.0 — guided VPN, HTTP/2, WebSocket and PCAP lab** on `dev/foundation`, Android 10+. Read [the verified implementation and limits](docs/INTEGRATED_LAB_STATUS.md) and [the course guide](docs/QUICK_START_AR.md). Historical reports below describe earlier versions.
+
+[Download debug APK and reports](https://github.com/nexvary/NEXVARY-Traffic/actions/runs/38875233858/artifacts/12035271235) · [Actual emulator screenshots](docs/screenshots/README.md)
+
 # NEXVARY Traffic Lab
 
-Android application for authorized local traffic-analysis labs.
+تطبيق Android لمعامل تحليل حركة الشبكة والتدريب المصرح به، مستعاد من حزمة المصدر `NEXVARY_Traffic_Lab_v10.0.3_BUILD_ERROR_FIXED_Source.zip`.
 
-Development imports and verification are maintained on `dev/foundation`.
+## الحالة الحالية
 
-Source baseline: NEXVARY_Traffic_Lab_v10.0.3_BUILD_ERROR_FIXED_Source.zip.
+- الإصدار المستورد: `10.0.3-build-fix-lab`، معرف التطبيق `com.nexvary.trafficlab`.
+- Android 8.0 فأحدث؛ compile/target SDK 35؛ Java 17؛ AGP 8.7.3.
+- فرع التطوير: `dev/foundation`.
+- لا تعتبر تقارير الاختبارات القديمة المرفقة إثباتًا لنجاح النسخة الحالية. راجع نتائج GitHub Actions لكل commit.
 
-This project is under development; an Android build and device validation are required before release.
+## الوظائف الموجودة في المصدر
+
+مختبر HTTP محلي، محرر طلبات مرئي وRAW، إعادة إرسال محلية، مقارنة الطلبات، سيناريوهات محاضرات، سجل وتقارير، تحليل حزم وDNS وتصدير PCAP، وقفل برمز مرور. موارد الترجمة تشمل العربية والإنجليزية والتركية والروسية والإسبانية والألمانية والإيطالية.
+
+## حدود يجب فهمها
+
+- خدمة VPN الحالية مقيدة بالشبكة `10.77.0.0/24`، وتقرأ الحزم وتسجلها؛ لا تحتوي محرك تمرير حركة الشبكة إلى الإنترنت. ليست بعد أداة التقاط عامة لكل التطبيقات.
+- عميل HTTP يرسل إلى loopback فقط. التطبيق لا ينفذ اعتراض TLS أو فك تشفير HTTPS.
+- استعادة رمز المرور بالبريد تحتاج خدمة HTTPS خارجية مهيأة وقت البناء؛ وجود زر الاستعادة لا يعني أن الخدمة مفعلة.
+- لم تُحسم رخصة النشر بعد. يجب التحقق من ملكية المصادر والأصول واختيار رخصة قبل الإعلان عن ترخيص مفتوح المصدر.
+
+## التحقق والبناء
+
+يشغل `bash verify_jvm.sh` اختبارات النواة باستخدام JDK 17. لبناء Android استخدم Gradle 8.9 وAndroid SDK 35 ثم `gradle assembleDebug lintDebug`.
+
+GitHub Actions يشغل الاختبارات والبناء وLint ويحفظ APK التجريبي والتقارير عند توفرها. APK التجريبي غير مخصص للنشر الإنتاجي.
+
+## العمل التالي
+
+1. معالجة أي أخطاء بناء أو Lint تظهر في التشغيل الآلي الأول.
+2. اختبار التطبيق فعليًا على Android 8 و13 و15، خصوصًا صلاحيات VPN ودورة حياة الخدمة والقفل واللغة العربية.
+3. توثيق ما إذا كان المنتج سيظل مختبرًا محليًا أم سيتوسع إلى التقاط تطبيقات الجهاز، قبل تغيير نطاق VPN.
+4. مراجعة حفظ الأدلة وحجم ملفات الالتقاط وإدارة الحذف قبل الاستخدام المطول.
+
+
+
+## مختبر HTTPS المدمج — 10.1.0
+
+شاشة HTTPS Lab تستخدم الآن محركًا داخل التطبيق بدل PCAPdroid: شهادة محلية، CONNECT/HTTP1.1، إيقاف الطلب وتعديله وتمريره أو إسقاطه وعرض الاستجابة. لا يتطلب هذا المسار تطبيق التقاط خارجيًا. يجب إعداد Proxy وثقة شهادة المختبر في العميل المستهدف.
+
+لا ندّعي بعد اعتراض كل تطبيق: محرك VPN الشامل وPinning/QUIC/HTTP2 غير مكتملين. راجع [الحالة الفعلية وحدود المحرك والاختبارات](docs/INTEGRATED_LAB_STATUS.md).

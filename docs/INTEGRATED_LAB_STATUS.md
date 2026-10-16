@@ -1,0 +1,60 @@
+# Integrated lab — 10.4.0 development
+
+The Android APK contains its own native VPN transport, authenticated SOCKS5 gateway, HTTPS proxy and device-local certificate authority. No external capture APK, Python runtime or remote proxy is required. This version requires Android 10 (API 29) or later because of the native dependency's declared minimum API.
+
+## Implemented
+
+- A five-step guided workflow: HTTPS website, engine setup, one explicit GET test, traffic review, and HAR/PCAP export. Target parsing rejects non-HTTPS URLs, embedded credentials, fragments and invalid ports. Engine origin checks gate the next step. The built-in probe trusts only the device CA for the local proxy; production upstream verification remains enabled. It does not follow redirects or crawl sites.
+- Bundled Microsoft Fluent PNG icons with preserved multicolor rendering and MIT notice. The main dashboard, navigation, setup, VPN/archive actions and login use the actual image assets; no font emoji substitute or single-color tint is applied. Android notification small icons remain monochrome as required by the platform.
+- HTTP/2 TLS frontend negotiated with ALPN, Netty 4.1.139.Final HPACK/frame decoding, up to four concurrent streams and 32 requests per connection, stream/connection flow control and bounded request/response editing. The upstream adapter uses verified HTTP/1.1 TLS, with a 1 MiB response limit per h2 stream. HTTP/2-only upstream servers, extended CONNECT and server push are not supported. Inspection previews represent the adapted HTTP/1.1 message; the flow viewer identifies HTTP/2.
+- WebSocket over HTTPS: validated HTTP/1.1 upgrade, full-duplex exact frame forwarding, masked client frames, text/binary messages, fragments, UTF-8 validation, Ping/Pong/Close, bounded live decoded previews. Compression extensions are removed from the upstream request so uncompressed framing is negotiated. Limits: 1 MiB/frame or assembled message, 16 MiB/direction, 4,096 frames/direction, 120-second session and 15-second idle timeout. The HTTP response pause gate does not pause the upgrade handshake. Message editing and WebSocket over HTTP/2 extended CONNECT are not implemented.
+- Passive QUIC v1/v2 long-header classification at TUN during PCAP recording: packet type, version, source/destination connection IDs. Version negotiation and Retry are identified. The packet payload, TLS secrets and HTTP/3 application data are not decrypted. Short headers and IPv6 extension-header chains are not classified. Header candidates are not cryptographically authenticated.
+
+- Optional full raw-IP PCAP recording at the Android TUN boundary in both directions. A datagram bridge preserves packet boundaries between TUN and the embedded engine. Capture uses DLT_RAW (101), microsecond timestamps, a 32 MiB total limit, no packet truncation, explicit export/delete after Stop, and deletion on app Exit. A new recording replaces the previous temporary file. Reaching the limit stops recording while forwarding continues. TLS remains encrypted in PCAP.
+- User-selected training applications and Android VPN consent; TCP, UDP, IPv4 and IPv6 default routing. A mapped DNS resolver preserves destination hostnames for inspection routing. The NEXVARY UID is excluded from the allowlist; outbound sockets are also protected against routing loops.
+- HevSocks5Tunnel 2.19.0 is packaged inside the APK. Build preparation verifies the AAR and source archive SHA-256 values and bundles upstream and dependency license notices. See VPN_INTEGRATION.md.
+- HTTPS CONNECT inspection for one configured hostname and port, via the explicit proxy or the VPN's mapped DNS path. AndroidKeyStore retains the non-exportable CA signing key. Upstream certificate and hostname validation remain enabled.
+- HTTP/1.1 request pause, edit, forward-original and drop, with Content-Length and chunked upload framing. Chunked bodies are decoded and normalized to Content-Length before forwarding and editing. Request body limit: 1 MiB. Expect negotiation remains unsupported.
+- Optional response pause, forward-original, drop and editing of uncompressed UTF-8 text. Paused responses are limited to 1 MiB. Ordinary streaming responses retain a 16 MiB transaction limit and a 64 KiB preview. Compressed/binary responses can be forwarded unchanged or dropped; they are not offered for editing.
+- A built-in offline HTTPS lesson runs a loopback TLS server and client, pauses a real request, permits editing and records the result. Its isolated trust context trusts only the device lab CA; production external upstream trust is unchanged.
+- Completed text previews feed History, Evidence and analysis pages. Archive handoff retains 32 exchanges with 32,768-character previews; truncation is labeled. Request and response instructor pauses are excluded from upstream timing.
+- HAR 1.2 export/import with NEXVARY preview extensions. Export hides bodies, query values and sensitive headers by default; full preview export is explicit. Imported/restored records carry separate provenance tags and are conservatively marked as preview-only. Imports are offline analysis and never replay traffic.
+- Optional encrypted local session save/restore/delete. AES-GCM uses a non-exportable AndroidKeyStore key. Exit clears the temporary archive; explicitly saved archives remain until deleted. No automatic retention is enabled. Files are limited to 5 MiB and 32 imported exchanges.
+- Navigation and exit tests cover main pages, Back behavior, Arabic navigation, HTTPS return, VPN/archive return, cancel Exit and confirmed Exit. Confirmed Exit revokes authentication, shuts down services and listeners, closes the demo server and removes the task.
+
+## Protocol and capture limits
+
+VPN forwarding does not make TLS universally decryptable. Applications must trust the lab CA. Certificate pinning, custom TLS, application-level encryption and end-to-end encryption are not bypassed. Applications using hard-coded or cached IPs or encrypted DNS can bypass hostname inspection, while their connections are forwarded. QUIC can travel through the VPN; its long-header metadata is classified in capture mode but its protected payload and HTTP/3 streams are not decrypted. HTTP/2 frontend and WebSocket-over-HTTP/1.1 inspection are implemented within the limits above.
+
+HAR stores metadata and explicitly labeled text previews, not byte-exact packet bodies. Packet Lab retains its explicitly labeled educational sample button; real VPN PCAP recording and export are available in the VPN screen. PCAP covers selected applications at TUN, not upstream protected sockets or all device interfaces. Capture files contain raw packet contents without redaction and are held in app-private cache until exported, deleted, replaced or app Exit. OS cache eviction can remove unexported captures. A process kill may leave a temporary capture with an unflushed tail; normal Stop flushes it. All protocols are not claimed to be decoded. Persistent archive restoration requires an unlocked session and explicit action. Larger streaming protocol support and physical-device verification remain outstanding.
+
+## Verification
+
+JVM suites include PCAP format, exact packet bytes, timestamps, record boundaries, replacement and size limits. Android native IPv4/IPv6 tests now traverse the capture bridge and verify recorded UDP in both directions. The separate-UID VPN test parses the exported PCAP and checks TCP, UDP, DNS and both directions; Exit checks deletion. JVM suites also include real authenticated TCP IPv4/IPv6 and UDP round-trips, shutdown, request framing, response editing, archive bounds and redaction. Android tests drive raw IPv4/IPv6 datagrams through the native engine, and a separate-UID fixture application generates TCP, UDP and mapped DNS through the actual Android VPN. Another separate-app test routes HTTPS through VPN, edits a request and checks the verified local TLS upstream result. Additional tests cover real TLS request modification, response edit/drop, production upstream-trust rejection, encrypted archive round-trip/tamper rejection and UI lifecycle.
+
+Read the CI result for the exact commit. Test source alone is not a passing result. No physical-device run has been performed in this environment.
+
+### Verified 10.4.0 build
+
+Application/test source commit `ca0613f7d255f0384016c693fad7487202012d6c` passes all 20 JVM test programs, debug APK assembly and Android lint, and all 23 instrumented methods on each of Android 10/API 29 and Android 15/API 35: 46 emulator executions, zero failed or skipped. Lint warnings remain. A second push-triggered run on the same source also passed all three jobs.
+
+The device coverage includes actual HTTP/2 ALPN, HPACK, concurrent streams, request editing and 80 KB response flow control; a real TLS WebSocket upgrade with text, Ping/Pong and Close; the guided website probe using HTTP/2; registration/unlock/lock/recovery guards; all main navigation routes, button action wiring, Arabic navigation, archive/PCAP export and active-service Exit. Touch tests wait for a focused rendered target window before injecting input. Email recovery tests verify the unconfigured fail-closed path, not actual email delivery.
+
+- [Verified CI, device logs and results](https://github.com/nexvary/NEXVARY-Traffic/actions/runs/38875233858)
+- [Debug APK and lint reports](https://github.com/nexvary/NEXVARY-Traffic/actions/runs/38875233858/artifacts/12035271235)
+- [Actual emulator screenshots and provenance](screenshots/README.md)
+
+APK: versionCode 107 / versionName `10.4.0-guided-lab`, Android 10+. Documentation-only updates may follow this verified source commit. Physical-device testing, full QUIC/HTTP3 payload decryption and optional recovery-server configuration remain outstanding. HTTP/2 inspection uses the HTTP/1.1 upstream adapter described above. PCAP retains the original encrypted TLS packets; inspected text previews are available through the flow viewer and HAR.
+
+### Previously verified 10.3.0 build
+
+Application/test source commit `c0e7defe4497f1b60936f850bb073a29cd5da995` passed 19 JVM test programs, debug APK assembly and Android lint, plus all 19 instrumented methods on each of API 29 and API 35 (38 emulator executions, zero failed or skipped). This includes the VPN screen writing and reading a real content-provider PCAP destination.
+
+- [Verified CI and logs](https://github.com/nexvary/NEXVARY-Traffic/actions/runs/38865287593)
+- [Debug APK and lint reports](https://github.com/nexvary/NEXVARY-Traffic/actions/runs/38865287593/artifacts/12030673406)
+
+Documentation-only updates may follow that source commit. The APK is versionCode 106 / versionName 10.3.0-pcap-lab, intended for testing. That result covers 10.3.0 only. For 10.4.0, consult the exact commit CI. Physical-device verification and full QUIC/HTTP3 decryption remain outstanding.
+
+## Authentication verification boundary
+
+Registration, mismatched-password rejection, incorrect-code rejection, unlock, lock and recovery dialog cancellation are exercised through Android UI controls. The default debug build has no `nexvaryRecoveryEndpoint`; email recovery therefore reports that it is unconfigured and cannot reset a password without verification. A test checks that those controls fail closed. Actual email delivery and server-side recovery are not claimed to be configured or tested.
