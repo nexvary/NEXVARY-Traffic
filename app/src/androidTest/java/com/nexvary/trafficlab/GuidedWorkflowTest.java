@@ -15,7 +15,7 @@ import java.util.concurrent.*;
 public final class GuidedWorkflowTest extends InstrumentationTestCase {
  private View find(View v,String tag){if(tag.equals(v.getTag()))return v;if(v instanceof ViewGroup){ViewGroup g=(ViewGroup)v;for(int i=0;i<g.getChildCount();i++){View found=find(g.getChildAt(i),tag);if(found!=null)return found;}}return null;}
  private void capture(String name)throws Exception{
-  getInstrumentation().waitForIdleSync();android.graphics.Bitmap image=getInstrumentation().getUiAutomation().takeScreenshot();assertNotNull(image);
+  getInstrumentation().waitForIdleSync();Thread.sleep(1000);getInstrumentation().waitForIdleSync();android.graphics.Bitmap image=getInstrumentation().getUiAutomation().takeScreenshot();assertNotNull(image);assertTrue("Captured a transition instead of the dark app surface",android.graphics.Color.red(image.getPixel(10,image.getHeight()/2))<120);
   Context context=getInstrumentation().getTargetContext();ContentValues values=new ContentValues();values.put(android.provider.MediaStore.Images.Media.DISPLAY_NAME,name+".png");values.put(android.provider.MediaStore.Images.Media.MIME_TYPE,"image/png");values.put(android.provider.MediaStore.Images.Media.RELATIVE_PATH,"Pictures/NEXVARY-QA");values.put(android.provider.MediaStore.Images.Media.IS_PENDING,1);
   android.net.Uri file=context.getContentResolver().insert(android.provider.MediaStore.Images.Media.EXTERNAL_CONTENT_URI,values);assertNotNull(file);
   try(OutputStream out=context.getContentResolver().openOutputStream(file)){assertNotNull(out);assertTrue(image.compress(android.graphics.Bitmap.CompressFormat.PNG,100,out));}finally{image.recycle();}

@@ -33,7 +33,7 @@ public final class GuidedLabActivity extends Activity {
         String[] names={tr("الموقع","Website"),tr("إعداد HTTPS","HTTPS setup"),tr("بدء الاختبار","Run test"),tr("مراجعة الطلبات","Inspect traffic"),tr("تصدير النتائج","Export results")};
         int[] icons={R.drawable.color_globe,R.drawable.color_shield,R.drawable.color_play,R.drawable.color_search,R.drawable.color_folder};
         ImageView image=new ImageView(this);image.setImageResource(icons[step]);image.setContentDescription(names[step]);page.addView(image,new LinearLayout.LayoutParams(-1,dp(80)));
-        text((step+1)+" / 5 · "+names[step],25);text(tr("الموقع  ←  الإعداد  ←  الاختبار  ←  المراجعة  ←  التصدير","Website  →  Setup  →  Test  →  Inspect  →  Export"),13);
+        text(tr("الخطوة "+(step+1)+" من 5 · "+names[step],(step+1)+" / 5 · "+names[step]),25);text(tr("الموقع  ←  الإعداد  ←  الاختبار  ←  المراجعة  ←  التصدير","Website  →  Setup  →  Test  →  Inspect  →  Export"),13);
         if(step==0){
             text(tr("أدخل رابط HTTPS الذي تريد فحصه داخل المختبر.","Enter the HTTPS website to test in your lab."),16);
             EditText input=new EditText(this);input.setTextColor(Color.WHITE);input.setHintTextColor(Color.LTGRAY);input.setHint("https://your-lab.example/path");input.setText(targetText);input.setSingleLine(true);input.setInputType(android.text.InputType.TYPE_CLASS_TEXT|android.text.InputType.TYPE_TEXT_VARIATION_URI);input.setTag("workflow:target");page.addView(input);
