@@ -15,7 +15,7 @@ public final class VpnPacketCapture {
     public static synchronized BoundedPcapCapture begin(Context context)throws IOException{
         if(active)throw new IOException("Stop the active VPN recording first");
         if(exports>0)throw new IOException("Wait for PCAP export to finish");
-        current=new BoundedPcapCapture(file(context),LIMIT);active=true;return current;
+        ProtocolObservations.clear();current=new BoundedPcapCapture(file(context),LIMIT);active=true;return current;
     }
     public static synchronized void stop(){if(current!=null)current.close();active=false;}
     public static synchronized String status(Context context){return current!=null?current.status():file(context).isFile()?"SAVED · "+file(context).length()+" B":"EMPTY";}
@@ -31,6 +31,6 @@ public final class VpnPacketCapture {
     }
     public static synchronized void clear(Context context)throws IOException{
         if(active)throw new IOException("Stop VPN before deleting PCAP");
-        if(file(context).exists()&&!file(context).delete())throw new IOException("Could not delete temporary PCAP");current=null;
+        if(file(context).exists()&&!file(context).delete())throw new IOException("Could not delete temporary PCAP");current=null;ProtocolObservations.clear();
     }
 }

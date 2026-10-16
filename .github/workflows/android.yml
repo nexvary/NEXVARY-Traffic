@@ -79,3 +79,4 @@ jobs:
             app/build/outputs/androidTest-results/
             device-logcat.txt
             fixture-network.log
+            ui-screenshots/

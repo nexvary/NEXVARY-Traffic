@@ -22,7 +22,7 @@ public final class VpnLabActivity extends Activity {
     private boolean resumed;
     private final Runnable poll=new Runnable(){public void run(){if(resumed){
         recordPcap.setEnabled(!LabVpnService.state.equals("RUNNING"));
-        long[] n=LabVpnService.stats();status.setText(LabVpnService.state+"\nTX "+n[0]+" packets / "+n[1]+" B · RX "+n[2]+" packets / "+n[3]+" B\nPCAP: "+VpnPacketCapture.status(VpnLabActivity.this));
+        long[] n=LabVpnService.stats();status.setText(LabVpnService.state+"\nTX "+n[0]+" packets / "+n[1]+" B · RX "+n[2]+" packets / "+n[3]+" B\nPCAP: "+VpnPacketCapture.status(VpnLabActivity.this)+"\n"+com.nexvary.trafficlab.vpn.ProtocolObservations.report());
         handler.postDelayed(this,1000);
     }}};
     private String tr(String ar,String en){return "ar".equals(LocaleController.getLanguage(this))?ar:en;}
@@ -31,7 +31,7 @@ public final class VpnLabActivity extends Activity {
         super.onCreate(saved);if(!AuthSession.isUnlocked()){startActivity(new Intent(this,LoginActivity.class));finish();return;}
         LinearLayout page=new LinearLayout(this);page.setOrientation(LinearLayout.VERTICAL);page.setPadding(24,24,24,24);page.setBackgroundColor(Color.rgb(2,9,18));
         page.setLayoutDirection("ar".equals(LocaleController.getLanguage(this))?View.LAYOUT_DIRECTION_RTL:View.LAYOUT_DIRECTION_LTR);
-        ScrollView scroll=new ScrollView(this);scroll.addView(page);setContentView(scroll);
+        ScrollView scroll=new ScrollView(this);scroll.addView(page);LabIcons.insets(scroll);setContentView(scroll);
         text(page,tr("شبكة المختبر المدمجة","Integrated VPN Lab"),24);
         text(page,tr("اختر تطبيقات التدريب؛ تمر اتصالات TCP وUDP عبر محرك NEXVARY المحلي دون إعداد Proxy داخلها. سيطلب Android إذن VPN، ويحل هذا الاتصال محل أي VPN آخر على الجهاز.",
             "Select training apps. TCP and UDP use the local NEXVARY engine without app proxy settings. Android asks for VPN consent; this replaces any other device VPN."),15);
@@ -85,7 +85,7 @@ public final class VpnLabActivity extends Activity {
     }
     private TextView text(LinearLayout p,String s,int size){TextView v=new TextView(this);v.setText(s);v.setTextSize(size);v.setTextColor(Color.WHITE);v.setPadding(0,12,0,16);p.addView(v);return v;}
     private EditText input(LinearLayout p,String s,String tag){EditText v=new EditText(this);v.setText(s);v.setTextColor(Color.WHITE);v.setHintTextColor(Color.LTGRAY);v.setSingleLine(true);v.setTag(tag);p.addView(v);return v;}
-    private void button(LinearLayout p,String s,String tag,Runnable action){Button b=new Button(this);b.setText(s);b.setAllCaps(false);b.setTag(tag);b.setOnClickListener(v->action.run());p.addView(b);}
+    private void button(LinearLayout p,String s,String tag,Runnable action){Button b=new Button(this);b.setText(s);b.setAllCaps(false);b.setTag(tag);LabIcons.tagged(b,tag);b.setOnClickListener(v->action.run());p.addView(b);}
     @Override protected void onActivityResult(int code,int result,Intent data){super.onActivityResult(code,result,data);if(code==92&&result==RESULT_OK&&data!=null&&data.getData()!=null){
         if(!AuthSession.isUnlocked()||exporting)return;exporting=true;
         android.net.Uri destination=data.getData();

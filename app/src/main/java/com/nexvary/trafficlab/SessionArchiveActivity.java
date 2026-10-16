@@ -22,7 +22,7 @@ public final class SessionArchiveActivity extends Activity {
         super.onCreate(saved);if(!AuthSession.isUnlocked()){finish();return;}
         captureSession=CapturedTraffic.archiveSession();
         LinearLayout page=new LinearLayout(this);page.setOrientation(LinearLayout.VERTICAL);page.setPadding(24,24,24,24);page.setBackgroundColor(Color.rgb(2,9,18));
-        ScrollView scroll=new ScrollView(this);scroll.addView(page);setContentView(scroll);
+        ScrollView scroll=new ScrollView(this);scroll.addView(page);LabIcons.insets(scroll);setContentView(scroll);
         text(page,tr("أرشيف جلسات المختبر","Lab session archive"),24);
         text(page,tr("تصدير HAR يخفي الأجسام وقيم الاستعلامات والترويسات الحساسة افتراضيًا. المعاينات النصية قد تكون مبتورة، ولا تمثل نسخة بايتية كاملة من البيانات.","HAR exports omit bodies, query values and sensitive headers by default. Text previews can be truncated and are not byte-exact captures."),15);
         state=text(page,"",14);state.setTag("archive:state");refresh();
@@ -53,6 +53,6 @@ public final class SessionArchiveActivity extends Activity {
     }
     private void refresh(){state.setText(CapturedTraffic.all().size()+" / 32 "+tr("جلسة مؤقتة","temporary exchanges"));}
     private TextView text(LinearLayout p,String s,int size){TextView v=new TextView(this);v.setText(s);v.setTextSize(size);v.setTextColor(Color.WHITE);v.setPadding(0,12,0,16);p.addView(v);return v;}
-    private void button(LinearLayout p,String s,String tag,Runnable action){Button b=new Button(this);b.setText(s);b.setAllCaps(false);b.setTag(tag);b.setOnClickListener(v->action.run());p.addView(b);}
+    private void button(LinearLayout p,String s,String tag,Runnable action){Button b=new Button(this);b.setText(s);b.setAllCaps(false);b.setTag(tag);LabIcons.tagged(b,tag);b.setOnClickListener(v->action.run());p.addView(b);}
     @Override protected void onDestroy(){export=null;worker.shutdown();super.onDestroy();}
 }

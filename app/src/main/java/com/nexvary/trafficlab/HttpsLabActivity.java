@@ -32,14 +32,14 @@ public final class HttpsLabActivity extends Activity {
         if(!AuthSession.isUnlocked()){startActivity(new Intent(this,LoginActivity.class));finish();return;}
         LinearLayout page=new LinearLayout(this);page.setOrientation(LinearLayout.VERTICAL);page.setPadding(24,24,24,24);page.setBackgroundColor(Color.rgb(2,9,18));
         page.setLayoutDirection("ar".equals(LocaleController.getLanguage(this))?View.LAYOUT_DIRECTION_RTL:View.LAYOUT_DIRECTION_LTR);
-        ScrollView scroll=new ScrollView(this);scroll.addView(page);setContentView(scroll);
+        ScrollView scroll=new ScrollView(this);scroll.addView(page);LabIcons.insets(scroll);setContentView(scroll);
         text(page,tr("مختبر HTTPS المدمج","Embedded HTTPS Lab"),24);
         text(page,tr("المحرك داخل NEXVARY؛ لا يحتاج PCAPdroid. اضبط Proxy في تطبيق التدريب أو إعدادات Wi-Fi على 127.0.0.1 والمنفذ 8888. يقبل المحرك وجهة المختبر المحددة فقط.",
                 "Engine runs inside NEXVARY. Configure your training app or Wi-Fi proxy as 127.0.0.1:8888. Only the configured lab destination is accepted."),15);
-        text(page,tr("يدعم محرك الفحص CONNECT وHTTP/1.1. استخدم صفحة VPN أدناه لتوجيه تطبيقات التدريب. يجب أن يثق التطبيق بشهادة المختبر؛ Pinning وQUIC وHTTP/2 وترقيات WebSocket لا تُفك بهذا المحرك.",
-                "Inspection supports CONNECT and HTTP/1.1. Open VPN below to route training apps. CA trust is required; pinning, QUIC, HTTP/2 and WebSocket upgrades are not decrypted by this engine."),14);
-        host=input(page,"api.training.example","tls:host");host.setHint(tr("اسم خادم التدريب","Training server hostname"));
-        port=input(page,"443","tls:port");port.setInputType(android.text.InputType.TYPE_CLASS_NUMBER);
+        text(page,tr("يدعم محرك الفحص CONNECT وHTTP/1.1 وHTTP/2 عبر ALPN. استخدم صفحة VPN أدناه لتوجيه تطبيقات التدريب. يجب أن يثق التطبيق بشهادة المختبر؛ يدعم WebSocket عبر HTTPS أيضًا. Pinning وQUIC لا يُفكّان بهذا المحرك.",
+                "Inspection supports CONNECT, HTTP/1.1 and HTTP/2 via ALPN. Open VPN below to route training apps. CA trust is required; WebSocket over HTTPS is inspected too. Pinning and QUIC are not decrypted by this engine."),14);
+        host=input(page,getIntent().getStringExtra("host")==null?"api.training.example":getIntent().getStringExtra("host"),"tls:host");host.setHint(tr("اسم خادم التدريب","Training server hostname"));
+        port=input(page,String.valueOf(getIntent().getIntExtra("port",443)),"tls:port");port.setInputType(android.text.InputType.TYPE_CLASS_NUMBER);
         pause=new CheckBox(this);pause.setText(tr("إيقاف الطلب قبل إرساله للتحرير","Pause request before forwarding"));pause.setTextColor(Color.WHITE);pause.setChecked(true);page.addView(pause);
         pauseResponse=new CheckBox(this);pauseResponse.setText(tr("إيقاف الاستجابة النصية قبل تسليمها (حتى 1 MiB)","Pause response before delivery (up to 1 MiB)"));pauseResponse.setTextColor(Color.WHITE);page.addView(pauseResponse);
         state=text(page,"",14);state.setTag("tls:state");
@@ -82,7 +82,7 @@ public final class HttpsLabActivity extends Activity {
     }
     private TextView text(LinearLayout page,String value,int size){TextView v=new TextView(this);v.setText(value);v.setTextSize(size);v.setTextColor(Color.WHITE);v.setPadding(0,12,0,16);page.addView(v);return v;}
     private EditText input(LinearLayout page,String value,String tag){EditText v=new EditText(this);v.setText(value);v.setTextColor(Color.WHITE);v.setHintTextColor(Color.LTGRAY);v.setSingleLine(true);v.setTag(tag);page.addView(v);return v;}
-    private void button(LinearLayout page,String title,String tag,Runnable action){Button b=new Button(this);b.setText(title);b.setAllCaps(false);b.setTag(tag);b.setOnClickListener(v->action.run());page.addView(b);}
+    private void button(LinearLayout page,String title,String tag,Runnable action){Button b=new Button(this);b.setText(title);b.setAllCaps(false);b.setTag(tag);LabIcons.tagged(b,tag);b.setOnClickListener(v->action.run());page.addView(b);}
     private void exportCertificate(){
         state.setText(tr("جار تجهيز الشهادة…","Preparing certificate…"));
         new Thread(()->{try{byte[] certificate=LabCertificateAuthority.open(this).encoded();runOnUiThread(()->{
@@ -117,7 +117,7 @@ public final class HttpsLabActivity extends Activity {
         rendered=flow.id;
         if(flow.status.equals("RESPONSE_PAUSED")&&responseRendered!=flow.id){responseRequest.setText(flow.responseTemplate);responseRendered=flow.id;}
         responseRequest.setEnabled(flow.status.equals("RESPONSE_PAUSED")&&!flow.responseTemplate.isEmpty());
-        request.setEnabled(flow.status.equals("PAUSED"));response.setText(flow.status+"\n"+flow.error+"\n"+flow.responseEditError+"\n"+flow.response);return;
+        request.setEnabled(flow.status.equals("PAUSED"));response.setText(flow.status+"\n"+flow.error+"\n"+flow.responseEditError+"\n"+flow.protocol+"\n"+flow.response+"\n"+String.join("\n",flow.messages()));return;
     }}
     @Override protected void onResume(){super.onResume();foreground=true;handler.post(poll);}
     @Override protected void onPause(){foreground=false;handler.removeCallbacks(poll);super.onPause();}

@@ -39,6 +39,7 @@ public final class TunPacketBridge implements Closeable {
             try{count=Os.read(from,packet,0,packet.length);}catch(ErrnoException e){if(e.errno==OsConstants.EAGAIN||e.errno==OsConstants.EINTR)continue;throw e;}
             if(count<=0)throw new IOException("Packet descriptor reached EOF");
             capture.record(packet,count,System.currentTimeMillis());
+            ProtocolObservations.packet(packet,count);
             // Datagram boundaries must survive: never split a partial packet into another write.
             while(running){
                 if(!ready(to,(short)OsConstants.POLLOUT))continue;

@@ -3,6 +3,7 @@ package com.nexvary.trafficlab.tls;
 import javax.net.ssl.*;
 import com.nexvary.trafficlab.core.CapturedTraffic;
 import com.nexvary.trafficlab.core.Http1Body;
+import com.nexvary.trafficlab.core.WebSocketWire;
 import com.nexvary.trafficlab.core.ResponseEditor;
 import java.net.*;
 import java.io.*;
@@ -17,6 +18,10 @@ public final class EmbeddedTlsProxy implements AutoCloseable {
     public static final class Flow {
         public final long id; public final String host;
         private long forwardingStarted,upstreamElapsed;
+        private final java.util.ArrayDeque<String> webSocketMessages=new java.util.ArrayDeque<>();
+        public synchronized java.util.List<String> messages(){return new java.util.ArrayList<>(webSocketMessages);}
+        private synchronized void message(String value){if(webSocketMessages.size()==32)webSocketMessages.removeFirst();webSocketMessages.addLast(value);}
+        public volatile String protocol="HTTP/1.1";
         public volatile String responseTemplate="", responseEditError="";
         private final CountDownLatch responseDecision=new CountDownLatch(1);
         private volatile String responseEdited;
@@ -67,6 +72,7 @@ public final class EmbeddedTlsProxy implements AutoCloseable {
         }, "nexvary-embedded-https"); accept.setDaemon(true); accept.start();
         return listener.getLocalPort();
     }
+    public boolean matches(String host,int port){return allowedHost.equalsIgnoreCase(host)&&allowedPort==port;}
     public boolean isRunning() { return running; }
     public synchronized List<Flow> flows() { return new ArrayList<>(flows); }
     private synchronized Flow newFlow() {
@@ -109,8 +115,38 @@ public final class EmbeddedTlsProxy implements AutoCloseable {
             flow=newFlow();
             client.getOutputStream().write("HTTP/1.1 200 Connection Established\r\n\r\n".getBytes(StandardCharsets.US_ASCII)); client.getOutputStream().flush();
             try (SSLSocket decrypted=(SSLSocket)ca.serverContext(allowedHost).getSocketFactory().createSocket(client, allowedHost, allowedPort, false)) {
-                decrypted.setUseClientMode(false); decrypted.setSoTimeout(15000); decrypted.startHandshake();
-                String head=headers(decrypted.getInputStream());
+                decrypted.setUseClientMode(false); decrypted.setSoTimeout(15000);SSLParameters inbound=decrypted.getSSLParameters();inbound.setApplicationProtocols(new String[]{"h2","http/1.1"});decrypted.setSSLParameters(inbound); decrypted.startHandshake();
+                if("h2".equals(decrypted.getApplicationProtocol())){
+                    flow.protocol="HTTP/2 connection";flow.status="HTTP2";
+                    Http2LabConnection.run(decrypted,allowedHost,allowedPort,(head,body)->{
+                        Flow stream=newFlow();stream.protocol="HTTP/2";
+                        ByteArrayOutputStream response=new ByteArrayOutputStream();
+                        byte[] prefix=head.getBytes(StandardCharsets.ISO_8859_1);ByteArrayOutputStream raw=new ByteArrayOutputStream();raw.write(prefix);raw.write(body);
+                        Socket exchange=new Socket(){
+                            private final InputStream in=new ByteArrayInputStream(raw.toByteArray());
+                            public InputStream getInputStream(){return in;}
+                            public OutputStream getOutputStream(){return new FilterOutputStream(response){public void write(byte[] bytes,int offset,int length)throws IOException{if(response.size()+length>MAX_BODY)throw new IOException("HTTP/2 response exceeds 1 MiB");response.write(bytes,offset,length);}public void write(int b)throws IOException{if(response.size()>=MAX_BODY)throw new IOException("HTTP/2 response exceeds 1 MiB");response.write(b);}};}
+                        };
+                        try{serveHttp1(exchange,stream);return response.toByteArray();}
+                        catch(Exception error){stream.status="FAILED";stream.error=error.toString();throw error;}
+                        finally{retain(stream);}
+                    });flow.status="COMPLETE";
+                }else serveHttp1(decrypted,flow);
+            }
+        } catch(Exception error) {
+            if(flow!=null) { flow.error=error.getClass().getSimpleName()+": "+error.getMessage(); flow.status="FAILED"; }
+        } finally {
+            if(flow!=null)retain(flow);
+            sockets.remove(client);
+        }
+    }
+    private void retain(Flow flow){
+        if(flow.status.equals("COMPLETE")&&!flow.request.isEmpty())CapturedTraffic.completed(captureGeneration,flow.request,flow.sent,flow.response,flow.upstreamElapsed,flow.responseTruncated);
+        if(flow.request.length()>MAX_SAMPLE)flow.request=flow.request.substring(0,MAX_SAMPLE);
+        flow.sent="";flow.edited=null;flow.responseEdited=null;flow.responseTemplate="";
+    }
+    private void serveHttp1(Socket decrypted,Flow flow)throws Exception{
+        String head=headers(decrypted.getInputStream());
                 if(head.toLowerCase(Locale.ROOT).contains("\r\nexpect:")) throw new IOException("Expect negotiation not supported yet");
                 byte[] body=Http1Body.read(head,decrypted.getInputStream(),MAX_BODY);
                 byte[] request=normalize(head,body);
@@ -136,6 +172,12 @@ public final class EmbeddedTlsProxy implements AutoCloseable {
                             remote.setSoTimeout(15000);
                             SSLParameters parameters=remote.getSSLParameters(); parameters.setEndpointIdentificationAlgorithm("HTTPS"); remote.setSSLParameters(parameters);
                             remote.startHandshake(); remote.getOutputStream().write(request); remote.getOutputStream().flush();
+                            if(WebSocketWire.isUpgrade(new String(request,StandardCharsets.ISO_8859_1))){
+                                String upgrade=headers(remote.getInputStream());WebSocketWire.response(upgrade,WebSocketWire.value(new String(request,StandardCharsets.ISO_8859_1),"Sec-WebSocket-Key"));
+                                decrypted.getOutputStream().write(upgrade.getBytes(StandardCharsets.ISO_8859_1));decrypted.getOutputStream().flush();
+                                flow.protocol="WebSocket";flow.response=upgrade;flow.status="WEBSOCKET";
+                                Flow current=flow;WebSocketRelay.run(decrypted,remote,current::message);flow.upstreamElapsed=(System.nanoTime()-flow.forwardingStarted)/1000000L;flow.status="COMPLETE";return;
+                            }
                             ByteArrayOutputStream sample=new ByteArrayOutputStream(); byte[] chunk=new byte[8192]; int count; long total=0;
                             while((count=remote.getInputStream().read(chunk))!=-1) {
                                 total+=count; if(total > 16L*1024*1024) throw new IOException("Response exceeds session limit");
@@ -159,32 +201,23 @@ public final class EmbeddedTlsProxy implements AutoCloseable {
                         }
                     } finally { sockets.remove(tcp); }
                 }
-            }
-        } catch(Exception error) {
-            if(flow!=null) { flow.error=error.getClass().getSimpleName()+": "+error.getMessage(); flow.status="FAILED"; }
-        } finally {
-            if(flow!=null && flow.status.equals("COMPLETE"))CapturedTraffic.completed(captureGeneration,flow.request,flow.sent,flow.response,flow.upstreamElapsed,flow.responseTruncated);
-            if(flow!=null){
-                if(flow.request.length()>MAX_SAMPLE)flow.request=flow.request.substring(0,MAX_SAMPLE);
-                flow.sent="";flow.edited=null;flow.responseEdited=null;flow.responseTemplate="";
-            }
-            sockets.remove(client);
-        }
     }
     private byte[] normalize(String head, byte[] body) throws IOException {
         if(body.length > MAX_BODY) throw new IOException("Request too large");
         String[] lines=head.split("\r\n"); String[] first=lines[0].split(" ");
         if(first.length!=3 || !first[0].matches("[A-Z]+") || !first[1].startsWith("/") || !first[2].equals("HTTP/1.1")) throw new IOException("HTTP/1.1 origin-form request required");
+        boolean websocket=WebSocketWire.isUpgrade(head);if(websocket)WebSocketWire.request(head,body);
         StringBuilder normalized=new StringBuilder(lines[0]).append("\r\nHost: ").append(allowedHost).append(':').append(allowedPort).append("\r\n");
         for(int i=1;i<lines.length;i++) {
             if(lines[i].isEmpty()) continue;
             int colon=lines[i].indexOf(':'); if(colon<1) throw new IOException("Malformed header");
             String name=lines[i].substring(0,colon);
             if(!name.matches("[!#$%&'*+.^_`|~0-9A-Za-z-]+")) throw new IOException("Invalid header name");
-            if(name.equalsIgnoreCase("Upgrade")) throw new IOException("Protocol upgrades are not supported yet");
+            if(name.equalsIgnoreCase("Upgrade")&&!websocket)throw new IOException("Unsupported protocol upgrade");
+            if(name.equalsIgnoreCase("Sec-WebSocket-Extensions"))continue;
             if(!name.equalsIgnoreCase("Transfer-Encoding") && !name.equalsIgnoreCase("Trailer") && !name.equalsIgnoreCase("Host") && !name.equalsIgnoreCase("Content-Length") && !name.equalsIgnoreCase("Connection") && !name.equalsIgnoreCase("Proxy-Connection")) normalized.append(lines[i]).append("\r\n");
         }
-        normalized.append("Content-Length: ").append(body.length).append("\r\nConnection: close\r\n\r\n");
+        normalized.append("Content-Length: ").append(body.length).append(websocket?"\r\nConnection: Upgrade\r\n\r\n":"\r\nConnection: close\r\n\r\n");
         ByteArrayOutputStream out=new ByteArrayOutputStream(); out.write(normalized.toString().getBytes(StandardCharsets.ISO_8859_1)); out.write(body); return out.toByteArray();
     }
     private static String headers(InputStream in) throws IOException {

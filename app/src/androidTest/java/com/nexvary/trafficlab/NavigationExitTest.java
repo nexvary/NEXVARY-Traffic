@@ -59,6 +59,7 @@ public class NavigationExitTest extends InstrumentationTestCase {
         getInstrumentation().runOnMainSync(()->{assertTrue("Button not visible "+tag,found[0].getGlobalVisibleRect(bounds));screenBounds(found[0],bounds);});touch(bounds);
     }
     private void collect(View root,Set<String> tags){Object tag=root.getTag();if(tag instanceof String && ((String)tag).startsWith("nav:") && !tag.equals("nav:back"))tags.add((String)tag);if(root instanceof ViewGroup){ViewGroup g=(ViewGroup)root;for(int i=0;i<g.getChildCount();i++)collect(g.getChildAt(i),tags);}}
+    private void assertButtonsWired(View view){if(view instanceof android.widget.Button&&view.isEnabled())assertTrue("Button without action: "+((android.widget.Button)view).getText(),view.hasOnClickListeners());if(view instanceof ViewGroup){ViewGroup group=(ViewGroup)view;for(int i=0;i<group.getChildCount();i++)assertButtonsWired(group.getChildAt(i));}}
     public void testEveryNavigationButtonAndBack() throws Exception {
         Set<String> tags=new LinkedHashSet<>();
         String[] routes={"API Graph","About","AutoDetect","Baseline","Cases","Cockpit","Composer","Contract","Dashboard","Data Journey","Dependencies","Diff","Evidence","Explain","Flow Studio","H2/gRPC","HTTPS Lab","History","Intercept","JWT/OAuth","Lecture","Matrix","Packet Lab","Packet Map","Presenter","Radar","Regression","Remediation","Repeater","Replay","Report","Story","TLS","TLS Posture","Timeline","Waterfall","WebSocket","What-If"};
@@ -66,6 +67,7 @@ public class NavigationExitTest extends InstrumentationTestCase {
         for(String tag:tags){
             if(tag.equals("nav:HTTPS Lab"))continue;
             click(tag);assertEquals(tag.substring(4),route());
+            getInstrumentation().runOnMainSync(()->assertButtonsWired(activity.getWindow().getDecorView()));
             assertTrue("Empty page "+tag,((ViewGroup)field("content")).getChildCount()>0);
             if(!tag.equals("nav:Dashboard")){click("nav:back");assertEquals("Dashboard",route());}
         }

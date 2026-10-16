@@ -1,8 +1,14 @@
-# Integrated lab — 10.3.0 development
+# Integrated lab — 10.4.0 development
 
 The Android APK contains its own native VPN transport, authenticated SOCKS5 gateway, HTTPS proxy and device-local certificate authority. No external capture APK, Python runtime or remote proxy is required. This version requires Android 10 (API 29) or later because of the native dependency's declared minimum API.
 
 ## Implemented
+
+- A five-step guided workflow: HTTPS website, engine setup, one explicit GET test, traffic review, and HAR/PCAP export. Target parsing rejects non-HTTPS URLs, embedded credentials, fragments and invalid ports. Engine origin checks gate the next step. The built-in probe trusts only the device CA for the local proxy; production upstream verification remains enabled. It does not follow redirects or crawl sites.
+- Bundled Microsoft Fluent PNG icons with preserved multicolor rendering and MIT notice. The main dashboard, navigation, setup, VPN/archive actions and login use the actual image assets; no font emoji substitute or single-color tint is applied. Android notification small icons remain monochrome as required by the platform.
+- HTTP/2 TLS frontend negotiated with ALPN, Netty 4.1.139.Final HPACK/frame decoding, up to four concurrent streams and 32 requests per connection, stream/connection flow control and bounded request/response editing. The upstream adapter uses verified HTTP/1.1 TLS, with a 1 MiB response limit per h2 stream. HTTP/2-only upstream servers, extended CONNECT and server push are not supported. Inspection previews represent the adapted HTTP/1.1 message; the flow viewer identifies HTTP/2.
+- WebSocket over HTTPS: validated HTTP/1.1 upgrade, full-duplex exact frame forwarding, masked client frames, text/binary messages, fragments, UTF-8 validation, Ping/Pong/Close, bounded live decoded previews. Compression extensions are removed from the upstream request so uncompressed framing is negotiated. Limits: 1 MiB/frame or assembled message, 16 MiB/direction, 4,096 frames/direction, 120-second session and 15-second idle timeout. Message editing and WebSocket over HTTP/2 extended CONNECT are not implemented.
+- Passive QUIC v1/v2 long-header classification at TUN during PCAP recording: packet type, version, source/destination connection IDs. Version negotiation and Retry are identified. The packet payload, TLS secrets and HTTP/3 application data are not decrypted. Short headers and IPv6 extension-header chains are not classified. Header candidates are not cryptographically authenticated.
 
 - Optional full raw-IP PCAP recording at the Android TUN boundary in both directions. A datagram bridge preserves packet boundaries between TUN and the embedded engine. Capture uses DLT_RAW (101), microsecond timestamps, a 32 MiB total limit, no packet truncation, explicit export/delete after Stop, and deletion on app Exit. A new recording replaces the previous temporary file. Reaching the limit stops recording while forwarding continues. TLS remains encrypted in PCAP.
 - User-selected training applications and Android VPN consent; TCP, UDP, IPv4 and IPv6 default routing. A mapped DNS resolver preserves destination hostnames for inspection routing. The NEXVARY UID is excluded from the allowlist; outbound sockets are also protected against routing loops.
@@ -18,7 +24,7 @@ The Android APK contains its own native VPN transport, authenticated SOCKS5 gate
 
 ## Protocol and capture limits
 
-VPN forwarding does not make TLS universally decryptable. Applications must trust the lab CA. Certificate pinning, custom TLS, application-level encryption and end-to-end encryption are not bypassed. Applications using hard-coded or cached IPs or encrypted DNS can bypass hostname inspection, while their connections are forwarded. QUIC and HTTP/2 can travel through the VPN but are not decoded by the HTTP/1.1 inspector; WebSocket upgrades are not inspected.
+VPN forwarding does not make TLS universally decryptable. Applications must trust the lab CA. Certificate pinning, custom TLS, application-level encryption and end-to-end encryption are not bypassed. Applications using hard-coded or cached IPs or encrypted DNS can bypass hostname inspection, while their connections are forwarded. QUIC can travel through the VPN; its long-header metadata is classified in capture mode but its protected payload and HTTP/3 streams are not decrypted. HTTP/2 frontend and WebSocket-over-HTTP/1.1 inspection are implemented within the limits above.
 
 HAR stores metadata and explicitly labeled text previews, not byte-exact packet bodies. Packet Lab retains its explicitly labeled educational sample button; real VPN PCAP recording and export are available in the VPN screen. PCAP covers selected applications at TUN, not upstream protected sockets or all device interfaces. Capture files contain raw packet contents without redaction and are held in app-private cache until exported, deleted, replaced or app Exit. OS cache eviction can remove unexported captures. A process kill may leave a temporary capture with an unflushed tail; normal Stop flushes it. All protocols are not claimed to be decoded. Persistent archive restoration requires an unlocked session and explicit action. Larger streaming protocol support and physical-device verification remain outstanding.
 
@@ -35,4 +41,4 @@ Application/test source commit `c0e7defe4497f1b60936f850bb073a29cd5da995` passed
 - [Verified CI and logs](https://github.com/nexvary/NEXVARY-Traffic/actions/runs/38865287593)
 - [Debug APK and lint reports](https://github.com/nexvary/NEXVARY-Traffic/actions/runs/38865287593/artifacts/12030673406)
 
-Documentation-only updates may follow that source commit. The APK is versionCode 106 / versionName 10.3.0-pcap-lab, intended for testing. Physical-device verification and HTTP/2, QUIC and WebSocket inspection remain outstanding.
+Documentation-only updates may follow that source commit. The APK is versionCode 106 / versionName 10.3.0-pcap-lab, intended for testing. That result covers 10.3.0 only. For 10.4.0, consult the exact commit CI. Physical-device verification and full QUIC/HTTP3 decryption remain outstanding.
