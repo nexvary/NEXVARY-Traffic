@@ -31,7 +31,7 @@ public final class PcapExportTest extends InstrumentationTestCase {
             getInstrumentation().runOnMainSync(()->activity.onActivityResult(92,Activity.RESULT_OK,new Intent().setData(uri)));
             byte[] data=new byte[0];long deadline=System.currentTimeMillis()+5000;
             while(data.length<60&&System.currentTimeMillis()<deadline){try(InputStream in=context.getContentResolver().openInputStream(uri);ByteArrayOutputStream out=new ByteArrayOutputStream()){
-                byte[] block=new byte[128];int n;while((n=in.read(block))!=-1)out.write(block,0,n);data=out.toByteArray();}if(data.length<60)Thread.sleep(25);}
+                byte[] block=new byte[128];int n;while((n=in.read(block))!=-1)out.write(block,0,n);data=out.toByteArray();}catch(FileNotFoundException pending){/* Provider creates the file when the asynchronous writer opens it. */}if(data.length<60)Thread.sleep(25);}
             assertEquals(60,data.length);ByteBuffer pcap=ByteBuffer.wrap(data).order(ByteOrder.LITTLE_ENDIAN);assertEquals(0xa1b2c3d4,pcap.getInt());pcap.position(20);assertEquals(101,pcap.getInt());
             assertEquals(1234,pcap.getInt());assertEquals(567000,pcap.getInt());assertEquals(20,pcap.getInt());assertEquals(20,pcap.getInt());byte[] actual=new byte[20];pcap.get(actual);assertTrue(java.util.Arrays.equals(packet,actual));
             getInstrumentation().runOnMainSync(()->find(activity.getWindow().getDecorView(),"vpn:clear").performClick());assertEquals("EMPTY",VpnPacketCapture.status(context));
