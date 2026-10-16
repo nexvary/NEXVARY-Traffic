@@ -22,6 +22,7 @@ android {
     packaging {
         resources {
             excludes += "META-INF/versions/9/OSGI-INF/MANIFEST.MF"
+            excludes += "META-INF/INDEX.LIST"
             merges += "META-INF/LICENSE.md"
             merges += "META-INF/LICENSE.txt"
             merges += "META-INF/NOTICE.txt"

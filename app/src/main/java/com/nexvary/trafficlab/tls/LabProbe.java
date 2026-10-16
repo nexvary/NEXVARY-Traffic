@@ -12,7 +12,8 @@ public final class LabProbe {
     public static volatile String state="IDLE",result="";
     private static long generation;
     private LabProbe(){}
-    public static synchronized void start(LabTarget target,LabCertificateAuthority ca)throws Exception{
+    public static void start(LabTarget target,LabCertificateAuthority ca)throws Exception{start(target,ca,false);}
+    public static synchronized void start(LabTarget target,LabCertificateAuthority ca,boolean http2)throws Exception{
         if(active!=null||state.equals("RUNNING"))throw new IOException("A test is already running");
         KeyStore trust=KeyStore.getInstance(KeyStore.getDefaultType());trust.load(null);trust.setCertificateEntry("lab",ca.certificate());
         TrustManagerFactory tm=TrustManagerFactory.getInstance(TrustManagerFactory.getDefaultAlgorithm());tm.init(trust);
@@ -26,11 +27,15 @@ public final class LabProbe {
                 tcp.getOutputStream().write(("CONNECT "+target.host()+":"+target.port()+" HTTP/1.1\r\nHost: "+target.host()+"\r\n\r\n").getBytes(StandardCharsets.US_ASCII));
                 if(!header(tcp.getInputStream()).startsWith("HTTP/1.1 200"))throw new IOException("Proxy rejected the selected destination");
                 try(SSLSocket tls=(SSLSocket)ssl.getSocketFactory().createSocket(tcp,target.host(),target.port(),false)){
-                    SSLParameters p=tls.getSSLParameters();p.setEndpointIdentificationAlgorithm("HTTPS");p.setApplicationProtocols(new String[]{"http/1.1"});tls.setSSLParameters(p);tls.setSoTimeout(300000);tls.startHandshake();
+                    SSLParameters p=tls.getSSLParameters();p.setEndpointIdentificationAlgorithm("HTTPS");p.setApplicationProtocols(http2?new String[]{"h2"}:new String[]{"http/1.1"});tls.setSSLParameters(p);tls.setSoTimeout(300000);tls.startHandshake();
+                    if(http2){if(!"h2".equals(tls.getApplicationProtocol()))throw new IOException("HTTP/2 ALPN was not negotiated");summary=Http2LabClient.get(tls.getInputStream(),tls.getOutputStream(),target);}
+                    else{
                     tls.getOutputStream().write(("GET "+target.path()+" HTTP/1.1\r\nHost: "+target.host()+":"+target.port()+"\r\nAccept: */*\r\nConnection: close\r\n\r\n").getBytes(StandardCharsets.US_ASCII));tls.getOutputStream().flush();
                     ByteArrayOutputStream preview=new ByteArrayOutputStream();byte[] chunk=new byte[8192];int n;long total=0;
                     while((n=tls.getInputStream().read(chunk))!=-1){total+=n;if(total>16L*1024*1024)throw new IOException("Response exceeds 16 MiB");if(preview.size()<32768)preview.write(chunk,0,Math.min(n,32768-preview.size()));}
                     summary=new String(preview.toByteArray(),StandardCharsets.UTF_8);if(summary.isEmpty())throw new IOException("Server returned no response");
+                    }
+
                 }
             }catch(Exception error){next="ERROR";summary=error.getClass().getSimpleName()+": "+error.getMessage();}
             synchronized(LabProbe.class){if(expected==generation){state=next;result=summary;active=null;}}

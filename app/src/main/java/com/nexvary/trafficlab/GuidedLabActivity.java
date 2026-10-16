@@ -15,13 +15,14 @@ public final class GuidedLabActivity extends Activity {
     private LabTarget target;
     private LinearLayout page;
     private TextView live;
+    private boolean useHttp2;
     private final Handler handler=new Handler(Looper.getMainLooper());
     private boolean resumed;
     private String tr(String ar,String en){return "ar".equals(LocaleController.getLanguage(this))?ar:en;}
     private final Runnable poll=new Runnable(){public void run(){if(resumed){if(live!=null)live.setText(EmbeddedProxyService.state+"\nTEST: "+LabProbe.state+"\n"+LabProbe.result);handler.postDelayed(this,700);}}};
     @Override protected void attachBaseContext(Context base){super.attachBaseContext(LocaleController.wrap(base));}
     @Override public void onCreate(Bundle saved){super.onCreate(saved);if(!AuthSession.isUnlocked()){finish();return;}
-        if(saved!=null){targetText=saved.getString("target","");step=saved.getInt("step",0);if(!targetText.isEmpty())try{target=LabTarget.parse(targetText);}catch(Exception ignored){step=0;}}
+        if(saved!=null){targetText=saved.getString("target","");step=saved.getInt("step",0);useHttp2=saved.getBoolean("h2",false);if(!targetText.isEmpty())try{target=LabTarget.parse(targetText);}catch(Exception ignored){step=0;}}
         if(Build.VERSION.SDK_INT>=33)getOnBackInvokedDispatcher().registerOnBackInvokedCallback(android.window.OnBackInvokedDispatcher.PRIORITY_DEFAULT,()->{if(step>0){step--;render();}else finish();});
         render();
     }
@@ -51,9 +52,10 @@ public final class GuidedLabActivity extends Activity {
                 button(tr("إيقاف المحرك","Stop engine"),"workflow:stop",()->{EmbeddedProxyService.stopNow();stopService(new Intent(this,EmbeddedProxyService.class));});
             }else if(step==2){
                 text(tr("يرسل الزر طلب GET واحدًا عبر محرك الفحص إلى المسار المحدد. لمراقبة تطبيق آخر افتح إعداد VPN.","Send one GET through the inspection engine to the selected path. To observe another app, configure VPN."),16);
+                CheckBox protocol=new CheckBox(this);protocol.setText("HTTP/2 (ALPN)");protocol.setTextColor(Color.WHITE);protocol.setChecked(useHttp2);protocol.setTag("workflow:http2");protocol.setOnCheckedChangeListener((v,checked)->useHttp2=checked);page.addView(protocol);
                 button(tr("ابدأ الاختبار","Start test"),"workflow:test",()->{
                     if(!matches()){message(tr("ارجع إلى الإعداد وشغّل المحرك لهذا الموقع","Return to setup and start the engine for this website"));return;}
-                    new Thread(()->{try{LabProbe.start(target,LabCertificateAuthority.open(this));}catch(Exception e){runOnUiThread(()->message(e.getMessage()));}},"nexvary-probe-setup").start();
+                    new Thread(()->{try{if(!AuthSession.isUnlocked())return;LabProbe.start(target,LabCertificateAuthority.open(this),useHttp2);}catch(Exception e){runOnUiThread(()->message(e.getMessage()));}},"nexvary-probe-setup").start();
                 });
                 button(tr("اختيار تطبيقات VPN وتسجيل PCAP","Select VPN apps and record PCAP"),"workflow:vpn",()->startActivity(new Intent(this,VpnLabActivity.class).putExtra("host",target.host()).putExtra("port",target.port())));
             }else if(step==3){
@@ -79,7 +81,7 @@ public final class GuidedLabActivity extends Activity {
     private void button(String label,String tag,Runnable action){Button b=new Button(this);b.setText(label);b.setAllCaps(false);b.setTag(tag);b.setMinHeight(dp(52));LabIcons.tagged(b,tag);b.setOnClickListener(v->action.run());page.addView(b,new LinearLayout.LayoutParams(-1,-2));}
     private int dp(int value){return (int)(value*getResources().getDisplayMetrics().density+.5f);}
     @Override public void onBackPressed(){if(step>0){step--;render();}else finish();}
-    @Override protected void onSaveInstanceState(Bundle out){out.putInt("step",step);out.putString("target",targetText);super.onSaveInstanceState(out);}
+    @Override protected void onSaveInstanceState(Bundle out){out.putInt("step",step);out.putBoolean("h2",useHttp2);out.putString("target",targetText);super.onSaveInstanceState(out);}
     @Override protected void onResume(){super.onResume();resumed=true;handler.post(poll);}
     @Override protected void onPause(){resumed=false;handler.removeCallbacks(poll);super.onPause();}
 }

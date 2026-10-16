@@ -9,6 +9,8 @@ public final class LabIcons {
     public static int resource(int old){
         if(old==R.drawable.ic_dashboard)return R.drawable.color_home;
         if(old==R.drawable.ic_back)return R.drawable.color_back;
+        if(old==R.drawable.ic_website)return R.drawable.color_globe;
+        if(old==R.drawable.ic_email)return R.drawable.color_folder;
         if(old==R.drawable.ic_language)return R.drawable.color_globe;
         if(old==R.drawable.ic_lock)return R.drawable.color_lock;
         if(old==R.drawable.ic_history)return R.drawable.color_folder;
