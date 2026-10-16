@@ -24,6 +24,7 @@ public final class HttpsLabActivity extends Activity {
     private String signature="";
     private byte[] publicCertificate;
     private boolean foreground;
+    private EmbeddedTlsProxy lastEngine;
     private final Runnable poll=new Runnable(){public void run(){if(foreground){refresh();handler.postDelayed(this,1000);}}};
     @Override protected void attachBaseContext(Context base){super.attachBaseContext(LocaleController.wrap(base));}
     private String tr(String ar,String en){return "ar".equals(LocaleController.getLanguage(this))?ar:en;}
@@ -41,7 +42,7 @@ public final class HttpsLabActivity extends Activity {
         host=input(page,getIntent().getStringExtra("host")==null?"api.training.example":getIntent().getStringExtra("host"),"tls:host");host.setHint(tr("اسم خادم التدريب","Training server hostname"));
         port=input(page,String.valueOf(getIntent().getIntExtra("port",443)),"tls:port");port.setInputType(android.text.InputType.TYPE_CLASS_NUMBER);
         pause=new CheckBox(this);pause.setText(tr("إيقاف الطلب قبل إرساله للتحرير","Pause request before forwarding"));pause.setTextColor(Color.WHITE);pause.setChecked(true);page.addView(pause);
-        pauseResponse=new CheckBox(this);pauseResponse.setText(tr("إيقاف الاستجابة النصية قبل تسليمها (حتى 1 MiB)","Pause response before delivery (up to 1 MiB)"));pauseResponse.setTextColor(Color.WHITE);page.addView(pauseResponse);
+        pauseResponse=new CheckBox(this);pauseResponse.setText(tr("إيقاف استجابة HTTP النصية قبل تسليمها (حتى 1 MiB)","Pause HTTP response before delivery (up to 1 MiB)"));pauseResponse.setTextColor(Color.WHITE);page.addView(pauseResponse);
         state=text(page,"",14);state.setTag("tls:state");
         button(page,tr("إنشاء وتصدير شهادة المختبر","Create and export lab CA"),"tls:certificate",this::exportCertificate);
         button(page,tr("إعدادات شهادات Android","Android certificate settings"),"tls:settings",()->startActivity(new Intent(Settings.ACTION_SECURITY_SETTINGS)));
@@ -68,13 +69,13 @@ public final class HttpsLabActivity extends Activity {
             public void onItemSelected(AdapterView<?> parent,View view,int position,long id){if(position<visible.size()){selected=visible.get(position).id;showSelected();}}
         });
         text(page,tr("الطلب: يمكن تعديل النص عند حالة PAUSED. افصل الترويسات عن الجسم بسطر فارغ.","Request: editable in PAUSED state. Separate headers and body with a blank line."),14);
-        request=input(page,"","tls:request");request.setSingleLine(false);request.setMinLines(6);request.setMaxLines(16);
+        request=input(page,"","tls:request");request.setTextDirection(View.TEXT_DIRECTION_LTR);request.setGravity(android.view.Gravity.LEFT);request.setSingleLine(false);request.setMinLines(6);request.setMaxLines(16);
         button(page,tr("تمرير الطلب الأصلي","Forward original request"),"tls:original",()->{try{if(EmbeddedProxyService.engine==null)throw new IllegalStateException("Engine stopped");EmbeddedProxyService.engine.decide(selected,null,false);refresh();}catch(Exception error){state.setText(error.getMessage());}});
         button(page,tr("تمرير الطلب المعدل","Forward edited request"),"tls:forward",()->decide(false));
         button(page,tr("إسقاط الطلب","Drop request"),"tls:drop",()->decide(true));
-        response=text(page,"",13);response.setTextIsSelectable(true);response.setTag("tls:response");
+        response=text(page,"",13);response.setTextDirection(View.TEXT_DIRECTION_LTR);response.setTextIsSelectable(true);response.setTag("tls:response");
         text(page,tr("تحرير الاستجابة: UTF-8 غير المضغوط فقط. يمكن دائمًا تمرير الأصل أو إسقاطه.","Response editor: uncompressed UTF-8 text. Forward Original and Drop also support non-editable responses."),14);
-        responseRequest=input(page,"","tls:response-editor");responseRequest.setSingleLine(false);responseRequest.setMinLines(4);responseRequest.setMaxLines(12);
+        responseRequest=input(page,"","tls:response-editor");responseRequest.setTextDirection(View.TEXT_DIRECTION_LTR);responseRequest.setGravity(android.view.Gravity.LEFT);responseRequest.setSingleLine(false);responseRequest.setMinLines(4);responseRequest.setMaxLines(12);
         button(page,tr("تمرير الاستجابة الأصلية","Forward original response"),"tls:response-original",()->responseDecision(false,false));
         button(page,tr("تمرير الاستجابة المعدلة","Forward edited response"),"tls:response-forward",()->responseDecision(true,false));
         button(page,tr("إسقاط الاستجابة","Drop response"),"tls:response-drop",()->responseDecision(false,true));
@@ -105,20 +106,31 @@ public final class HttpsLabActivity extends Activity {
     }catch(Exception error){state.setText(error.getMessage());}}
     private void refresh(){
         if(state==null)return;state.setText(EmbeddedProxyService.state+" · 127.0.0.1:8888"+(EmbeddedProxyService.lesson==null?"":"\n"+EmbeddedProxyService.lesson.result));
-        EmbeddedTlsProxy engine=EmbeddedProxyService.engine;visible=engine==null?java.util.Collections.emptyList():engine.flows();
+        EmbeddedTlsProxy engine=EmbeddedProxyService.engine;
+        if(engine!=lastEngine){lastEngine=engine;selected=-1;rendered=-1;responseRendered=-1;signature="";request.setText("");responseRequest.setText("");response.setText("");}
+        enable("tls:start",engine==null);enable("tls:stop",engine!=null);
+        visible=engine==null?java.util.Collections.emptyList():engine.flows().stream().filter(flow->!flow.protocol.equals("HTTP/2 connection")||flow.status.equals("FAILED")).collect(java.util.stream.Collectors.toList());
         StringBuilder key=new StringBuilder();String[] labels=new String[visible.size()];int position=0;
         for(int i=0;i<visible.size();i++){EmbeddedTlsProxy.Flow flow=visible.get(i);labels[i]="#"+flow.id+" "+flow.host+" · "+flow.status;key.append(labels[i]);if(flow.id==selected)position=i;}
         if(!signature.equals(key.toString())){signature=key.toString();selector.setAdapter(new ArrayAdapter<>(this,android.R.layout.simple_spinner_dropdown_item,labels));selector.setSelection(position);}
         if(selected<0 && !visible.isEmpty())selected=visible.get(0).id;
         showSelected();
     }
-    private void showSelected(){for(EmbeddedTlsProxy.Flow flow:visible)if(flow.id==selected){
+    private void enable(String tag,boolean enabled){View v=getWindow().getDecorView().findViewWithTag(tag);if(v!=null)v.setEnabled(enabled);}
+    private void showSelected(){
+        for(String tag:new String[]{"tls:original","tls:forward","tls:drop","tls:response-original","tls:response-forward","tls:response-drop"})enable(tag,false);
+        for(EmbeddedTlsProxy.Flow flow:visible)if(flow.id==selected){
+        boolean requestPaused=flow.status.equals("PAUSED"),responsePaused=flow.status.equals("RESPONSE_PAUSED");
+        for(String tag:new String[]{"tls:original","tls:forward","tls:drop"})enable(tag,requestPaused);
+        enable("tls:response-original",responsePaused);enable("tls:response-drop",responsePaused);enable("tls:response-forward",responsePaused&&!flow.responseTemplate.isEmpty());
         if(rendered!=flow.id || !request.hasFocus() || !flow.status.equals("PAUSED"))request.setText(flow.request);
         rendered=flow.id;
         if(flow.status.equals("RESPONSE_PAUSED")&&responseRendered!=flow.id){responseRequest.setText(flow.responseTemplate);responseRendered=flow.id;}
         responseRequest.setEnabled(flow.status.equals("RESPONSE_PAUSED")&&!flow.responseTemplate.isEmpty());
         request.setEnabled(flow.status.equals("PAUSED"));response.setText(flow.status+"\n"+flow.error+"\n"+flow.responseEditError+"\n"+flow.protocol+"\n"+flow.response+"\n"+String.join("\n",flow.messages()));return;
-    }}
+    }
+        request.setEnabled(false);responseRequest.setEnabled(false);
+    }
     @Override protected void onResume(){super.onResume();foreground=true;handler.post(poll);}
     @Override protected void onPause(){foreground=false;handler.removeCallbacks(poll);super.onPause();}
 }

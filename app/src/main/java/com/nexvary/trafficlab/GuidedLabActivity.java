@@ -28,7 +28,7 @@ public final class GuidedLabActivity extends Activity {
     }
     private void render(){
         live=null;
-        page=new LinearLayout(this);page.setOrientation(1);int pad=dp(20);page.setPadding(pad,pad,pad,pad);page.setBackgroundColor(Color.rgb(2,9,18));page.setLayoutDirection("ar".equals(LocaleController.getLanguage(this))?View.LAYOUT_DIRECTION_RTL:View.LAYOUT_DIRECTION_LTR);
+        page=new LinearLayout(this);page.setOrientation(LinearLayout.VERTICAL);int pad=dp(20);page.setPadding(pad,pad,pad,pad);page.setBackgroundColor(Color.rgb(2,9,18));page.setLayoutDirection("ar".equals(LocaleController.getLanguage(this))?View.LAYOUT_DIRECTION_RTL:View.LAYOUT_DIRECTION_LTR);
         ScrollView scroll=new ScrollView(this);scroll.setFillViewport(true);scroll.addView(page);LabIcons.insets(scroll);setContentView(scroll);
         String[] names={tr("الموقع","Website"),tr("إعداد HTTPS","HTTPS setup"),tr("بدء الاختبار","Run test"),tr("مراجعة الطلبات","Inspect traffic"),tr("تصدير النتائج","Export results")};
         int[] icons={R.drawable.color_globe,R.drawable.color_shield,R.drawable.color_play,R.drawable.color_search,R.drawable.color_folder};
@@ -45,11 +45,11 @@ public final class GuidedLabActivity extends Activity {
             if(step==1){
                 text(tr("ابدأ المحرك للموقع المحدد. اختبار الموقع الداخلي يثق بشهادة المختبر تلقائيًا؛ التطبيقات الخارجية تحتاج إعداد الثقة واختيارها في VPN.","Start the engine for this website. The built-in probe trusts the lab CA; external apps need CA trust and VPN selection."),16);
                 button(tr("تجهيز وتشغيل محرك HTTPS","Prepare and start HTTPS engine"),"workflow:start",()->{
-                    if(EmbeddedProxyService.engine!=null){message(tr("أوقف المحرك الحالي لتغيير الموقع","Stop the current engine to change destination"));return;}
+                    if(EmbeddedProxyService.engine!=null){message(matches()?tr("المحرك جاهز؛ اضغط التالي","Engine ready; press Next"):tr("أوقف المحرك الحالي لتغيير الموقع","Stop the current engine to change destination"));return;}
                     startForegroundService(new Intent(this,EmbeddedProxyService.class).putExtra("host",target.host()).putExtra("port",target.port()).putExtra("pause",false));
                 });
                 button(tr("إعداد الشهادة والتحرير المتقدم","Certificate and advanced editing"),"workflow:https",this::openHttps);
-                button(tr("إيقاف المحرك","Stop engine"),"workflow:stop",()->{EmbeddedProxyService.stopNow();stopService(new Intent(this,EmbeddedProxyService.class));});
+                button(tr("إيقاف المحرك","Stop engine"),"workflow:stop",()->{LabProbe.stop();EmbeddedProxyService.stopNow();stopService(new Intent(this,EmbeddedProxyService.class));});
             }else if(step==2){
                 text(tr("يرسل الزر طلب GET واحدًا عبر محرك الفحص إلى المسار المحدد. لمراقبة تطبيق آخر افتح إعداد VPN.","Send one GET through the inspection engine to the selected path. To observe another app, configure VPN."),16);
                 CheckBox protocol=new CheckBox(this);protocol.setText("HTTP/2 (ALPN)");protocol.setTextColor(Color.WHITE);protocol.setChecked(useHttp2);protocol.setTag("workflow:http2");protocol.setOnCheckedChangeListener((v,checked)->useHttp2=checked);page.addView(protocol);
