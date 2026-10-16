@@ -1,4 +1,6 @@
-> Current development: **10.4.0 VPN, HTTPS and PCAP lab** on `dev/foundation`. Read [the current implementation and limits](docs/INTEGRATED_LAB_STATUS.md). Android 10+ is required. Run `bash ci/prepare-native.sh` before Gradle to obtain and verify the bundled native transport. Historical reports below describe earlier versions.
+> Current development: **10.4.0 — guided VPN, HTTP/2, WebSocket and PCAP lab** on `dev/foundation`, Android 10+. Read [the verified implementation and limits](docs/INTEGRATED_LAB_STATUS.md) and [the course guide](docs/QUICK_START_AR.md). Historical reports below describe earlier versions.
+
+[Download debug APK and reports](https://github.com/nexvary/NEXVARY-Traffic/actions/runs/38875233858/artifacts/12035271235) · [Actual emulator screenshots](docs/screenshots/README.md)
 
 # NEXVARY Traffic Lab
 

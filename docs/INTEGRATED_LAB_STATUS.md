@@ -34,7 +34,19 @@ JVM suites include PCAP format, exact packet bytes, timestamps, record boundarie
 
 Read the CI result for the exact commit. Test source alone is not a passing result. No physical-device run has been performed in this environment.
 
-### Verified 10.3.0 build
+### Verified 10.4.0 build
+
+Application/test source commit `ca0613f7d255f0384016c693fad7487202012d6c` passes all 20 JVM test programs, debug APK assembly and Android lint, and all 23 instrumented methods on each of Android 10/API 29 and Android 15/API 35: 46 emulator executions, zero failed or skipped. Lint warnings remain. A second push-triggered run on the same source also passed all three jobs.
+
+The device coverage includes actual HTTP/2 ALPN, HPACK, concurrent streams, request editing and 80 KB response flow control; a real TLS WebSocket upgrade with text, Ping/Pong and Close; the guided website probe using HTTP/2; registration/unlock/lock/recovery guards; all main navigation routes, button action wiring, Arabic navigation, archive/PCAP export and active-service Exit. Touch tests wait for a focused rendered target window before injecting input. Email recovery tests verify the unconfigured fail-closed path, not actual email delivery.
+
+- [Verified CI, device logs and results](https://github.com/nexvary/NEXVARY-Traffic/actions/runs/38875233858)
+- [Debug APK and lint reports](https://github.com/nexvary/NEXVARY-Traffic/actions/runs/38875233858/artifacts/12035271235)
+- [Actual emulator screenshots and provenance](screenshots/README.md)
+
+APK: versionCode 107 / versionName `10.4.0-guided-lab`, Android 10+. Documentation-only updates may follow this verified source commit. Physical-device testing, full QUIC/HTTP3 payload decryption and optional recovery-server configuration remain outstanding. HTTP/2 inspection uses the HTTP/1.1 upstream adapter described above. PCAP retains the original encrypted TLS packets; inspected text previews are available through the flow viewer and HAR.
+
+### Previously verified 10.3.0 build
 
 Application/test source commit `c0e7defe4497f1b60936f850bb073a29cd5da995` passed 19 JVM test programs, debug APK assembly and Android lint, plus all 19 instrumented methods on each of API 29 and API 35 (38 emulator executions, zero failed or skipped). This includes the VPN screen writing and reading a real content-provider PCAP destination.
 

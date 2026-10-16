@@ -1,4 +1,6 @@
-> الحالة الحالية: **10.4.0 — محرك VPN داخلي ومختبر HTTPS وتسجيل PCAP فعلي**، Android 10+. راجع [دليل الدورة والتشغيل](docs/QUICK_START_AR.md) و[الوظائف والحدود الفعلية](docs/INTEGRATED_LAB_STATUS.md). التقارير الأقدم أدناه تخص إصدارات سابقة.
+> النسخة التطويرية الحالية: **10.4.0 — خطوات فحص متتابعة وأيقونات ملونة وفحص HTTP/2 وWebSocket**، Android 10+. راجع [دليل الدورة والتشغيل](docs/QUICK_START_AR.md) و[الوظائف والحدود والاختبارات الفعلية](docs/INTEGRATED_LAB_STATUS.md). التقارير الأقدم أدناه تخص إصدارات سابقة.
+
+[تحميل APK التجريبي والتقارير](https://github.com/nexvary/NEXVARY-Traffic/actions/runs/38875233858/artifacts/12035271235) · [صور فعلية من المحاكي](docs/screenshots/README.md)
 
 # NEXVARY Traffic Lab v10.0.1-fixed-lab
 
